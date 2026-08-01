@@ -1,0 +1,6 @@
+// Deliberately violates: a grep for `confidence` under domain/ returns nothing.
+// Confidence is machinery, not knowledge (ADR-0002).
+export interface Belief {
+  readonly statement: string;
+  readonly confidence: number;
+}

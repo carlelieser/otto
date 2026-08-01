@@ -1,0 +1,9 @@
+node_modules/
+
+# Specifications and project instructions are authored by hand; reformatting
+# them produces diffs that have nothing to do with the code.
+docs/
+CONTEXT.md
+CLAUDE.md
+AGENTS.md
+README.md

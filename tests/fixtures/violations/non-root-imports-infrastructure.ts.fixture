@@ -1,0 +1,5 @@
+// Deliberately violates: only the composition root imports infrastructure/.
+// Written as it would appear at src/application/pipeline/.
+import { SqliteEventStore } from "../../infrastructure/persistence/sqlite-event-store.js";
+
+export const store = SqliteEventStore;

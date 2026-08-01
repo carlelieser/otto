@@ -23,6 +23,9 @@ Two properties explain most of the choices below:
 | Pipeline runtime | Node sidecar, TypeScript | ADR-0013, `runtime.md` §1 |
 | Host ↔ sidecar transport | JSON-RPC over stdio | ADR-0013, `runtime.md` §1 |
 | Database | SQLite, WAL mode | ADR-0005, ADR-0013 |
+| SQLite driver | `better-sqlite3` — loads binary extensions | §8, `runtime.md` §4.3 |
+| Test runner | Vitest | §8, `qa.md` §12 |
+| Property-based testing | `fast-check` | §8, `qa.md` §3 |
 | Query layer | Drizzle | ADD §3 |
 | Vector index | SQLite-Vector 1.0 (`sqliteai/sqlite-vector`), loadable extension | `runtime.md` §4.3 |
 | Full-text search | SQLite FTS | `runtime.md` §4 |
@@ -120,8 +123,8 @@ The floor Otto must clear to claim local support is that **the local path produc
 
 ## 8. Not yet decided
 
-- **Test framework and runner.** `qa.md` specifies tiers, rigour, and release criteria, and names the *kinds* of test required — property-based tests and in-memory integration tests among them — but no runner, assertion library, or property-testing library is chosen.
-- **The SQLite driver.** The spike used `better-sqlite3`; nothing decides what the sidecar uses, and the driver must be able to load a binary extension (`runtime.md` §4.3).
+- ~~**Test framework and runner.**~~ **Decided in Slice 0: Vitest, with `fast-check` for property-based tests.** `qa.md` §12 step 3 makes the Tier 1 pure tests unstartable without a runner, so the decision belonged with the foundation. Vitest carries its own assertion library, so no third choice is needed.
+- ~~**The SQLite driver.**~~ **Decided in Slice 0: `better-sqlite3`** — the driver the spike used, and confirmed to expose `loadExtension`, which `runtime.md` §4.3 requires for the vector extension in Slice 3. Its synchronous API also suits a sidecar that serialises the pipeline to one Capture at a time (ADD §4).
 - **SQLite-Vector's licence**, which GitHub does not report as a recognised SPDX identifier. Worth confirming before it is bundled into a distributed installer.
 - **Build and packaging pipeline.** How the sidecar, `whisper.cpp`, the embedding model, and the vector extension are bundled into a Tauri installer per platform.
 - **Svelte version and UI dependencies.** ADD §3 names Svelte; nothing specifies a version, router, or component approach.
