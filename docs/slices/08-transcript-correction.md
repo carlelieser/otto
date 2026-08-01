@@ -39,7 +39,7 @@ It is also the smallest slice that touches the immutability rule, which is why i
 
 ## Build order
 
-1. The corrected-text field on the Capture and the `CaptureTranscriptCorrected` event.
+1. The `CaptureTranscriptCorrected` event. The `corrected_text` column already exists from Slice 1, holding `NULL` — this slice is the first thing to write it, which is what makes the change an append rather than a migration against a table whose triggers refuse UPDATE.
 2. The correction affordance on a voice Capture, one step.
 3. Extraction reading corrected text in preference to raw.
 4. Automatic re-run of the pipeline for the corrected Capture.

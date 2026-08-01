@@ -31,7 +31,7 @@ Last, because it is the one slice that has to see all the others. Every surface 
 
 **Packaging per platform** (`stack.md` §6, §8). The installer carries `whisper.cpp`, the embedding model, and the SQLite-Vector native extension per target — roughly 650 MB before Otto's own code, accepted because working offline on first launch is worth more than a small download. The Node sidecar ships alongside the Tauri binary.
 
-**Closing `stack.md` §8's remaining open rows**: the build and packaging pipeline, the Svelte version and UI dependencies, and the Node version for the sidecar. (The test framework closed in Slice 0; the SQLite driver in Slice 0–1; SQLite-Vector's licence in Slice 3.)
+**Closing `stack.md` §8's remaining open rows**: the build and packaging pipeline, the Svelte version and UI dependencies, and how the sidecar's Node runtime *ships* — Slice 1 settled the development answer (the host spawns an installed Node, behind a configurable interpreter path) and left the bundled runtime here, which this slice substitutes without rewriting the supervisor. (The test framework closed in Slice 0; the SQLite driver in Slice 0–1; the Rust toolchain and Tauri version in Slice 1; SQLite-Vector's licence in Slice 3.)
 
 **Cross-platform smoke**: the application launches, the tray works, and the hotkey binds on macOS, Windows, and Linux.
 
