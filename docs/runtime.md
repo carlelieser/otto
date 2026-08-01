@@ -62,6 +62,10 @@ PRD §4.6 and ADR-0008 make local operation a requirement rather than a preferen
 
 Name accuracy is the metric that matters, not general WER: "Sarah" transcribed as "Sara" is a resolution problem, and unusual names are exactly what a small model gets wrong. Two mitigations, both cheap: entity names from the projection are supplied to the transcriber as an initial prompt, which measurably improves proper-noun recall, and transcripts remain user-correctable (§5).
 
+**Transcription runs in the sidecar, not the host.** §1 puts audio capture in Rust because that is where the OS APIs are, which invites the assumption that transcription follows it there. It does not: ADD §9 puts transcription behind the `Transcriber` port, and `ports/` is TypeScript. An adapter in Rust would be a port implementation in a language with no ports directory and no lint rule watching the boundary.
+
+The host records to a temporary file and passes the *path* over stdio; the sidecar reads it, transcribes, and deletes it. Audio bytes never cross the transport — a path is small and a WAV is not. The cost is a temporary file owned by two processes: the host writes it, the sidecar deletes it after a successful read, and the supervisor sweeps orphans on restart.
+
 `large-v3` is offered as an optional download for users who want it. The bundled default optimises for working immediately.
 
 ### Extraction and adjudication
@@ -104,6 +108,10 @@ proposal_id  = hash(capture_id, stage, provider, model_version, ordinal)
 ```
 
 A retry with the same model produces the same ids and is idempotent. A re-run under a new model produces new ids, and its Proposals arrive as ordinary Proposals subject to ordinary triage. Both behaviours fall out of one rule.
+
+**The inputs need pinning, because dedup is only as stable as its least-specified term.** The hash is SHA-256 truncated to 32 hex characters, matching the event-id derivation Slice 0 settled — two id schemes in one system invites a third. `content_hash` covers the raw text (§5). `source_timestamp` is ISO 8601, millisecond precision, UTC, since one instant formatted two ways hashes two ways.
+
+For a voice Capture, `source_timestamp` is **when recording started**. Recording end and transcription-completion are both properties of the run rather than the input: transcription varies in duration, so either would give a re-upload of identical audio a different id and produce the duplicate Capture this section exists to prevent.
 
 **Re-extraction is manual and scoped**, not automatic on upgrade. Silently re-processing history when a model changes would flood the review queue and re-litigate settled knowledge. It is an explicit action over a selected range of Captures, which makes it a tool for recovering from a known-bad extraction period rather than a background process.
 
@@ -182,6 +190,8 @@ Full rebuild is 215 ms at the specified corpus and 15 s at 25× it — one milli
 Captures are immutable (ADR-0005, ADD §5.1) and transcription is imperfect (§2). Reconciling those needs an answer that does not weaken the immutability rule.
 
 **The Capture stores both the raw transcript and, optionally, a user-corrected text.** Both are immutable once written; correcting a transcript appends a `CaptureTranscriptCorrected` event carrying the corrected text, and the original is never overwritten. The corrected text becomes what Extraction reads.
+
+**Normalised text is not a third stored column.** Normalisation — whitespace and transcript cleanup, per ADD §5.1 — is a pure function of the raw text, so storing its output would be a second truth that can disagree with the first the day the normaliser changes. It is derived on read. This also fixes what `content_hash` covers: the raw text, which is strictly more discriminating and keeps every existing `capture_id` stable across a change to the normaliser.
 
 This keeps the rule intact — nothing is mutated, and provenance can still name exactly what text produced a given fact. It also means a mis-transcribed name is fixable in one step rather than being a permanent wrong entity.
 
