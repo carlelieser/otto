@@ -6,13 +6,13 @@
 
 ## 1. What this plan optimises for
 
-Otto is not a system where all bugs cost the same, and a plan that treats them as equal would spend most of its effort in the wrong place. Three properties of this system set the priorities.
+Otto is not a system where all bugs cost the same. Three properties set the priorities.
 
 **One failure is unrecoverable and the rest are not.** The event log and the Captures are the sole source of truth (ADR-0005), and every other table is derived and droppable (ADD §6). A corrupt projection is a rebuild. A corrupt log is the end of the user's knowledge base. That asymmetry is the single most important input to this plan: the tests guarding write-path integrity are not the same kind of test as the ones guarding a list view, and they get a different standard of rigour.
 
 **The product metric is trust, and trust fails silently.** PRD §8 names the failure mode: the user stops believing the knowledge base, so they stop capturing, so it decays. The bug that causes this is not a crash — it is a confidently wrong auto-apply that the user believes and never checks. Crashes get reported; silent wrongness does not. So the tests that matter most are the ones that verify Otto *declined* to act, which is the hardest class of behaviour to notice missing.
 
-**The middle of the system is probabilistic and cannot be asserted on.** An LLM read a note; the output is not a fixed value. This does not mean it is untestable — it means it needs a different instrument. The boundary is sharp and the architecture already draws it: extraction and adjudication are non-deterministic, and *everything else is deterministic by construction* (ADR-0007). The differ, the thresholds, the application policy, the executor, and the projections are all exactly-assertable. §5 covers the deterministic majority with ordinary tests; §6 covers the probabilistic minority with an eval set that measures rather than asserts.
+**The middle of the system is probabilistic and cannot be asserted on.** An LLM read a note; the output is not a fixed value. That needs a different instrument, not no instrument. The boundary is sharp and the architecture already draws it: extraction and adjudication are non-deterministic, and *everything else is deterministic by construction* (ADR-0007). The differ, the thresholds, the application policy, the executor, and the projections are all exactly-assertable. §5 covers the deterministic majority with ordinary tests; §6 covers the probabilistic minority with an eval set that measures rather than asserts.
 
 ### The ranking that follows
 
@@ -40,7 +40,7 @@ The rest of this document is organised by tier, not by module, because that is t
 
 ## 3. Test levels and where each is used
 
-Five levels, each earning its place by testing something the others cannot.
+Five levels, each testing something the others cannot.
 
 **Pure unit tests** — `domain/` and the pure functions in `inference/calibration/`. No I/O, no fixtures, no async. The application policy, the threshold table, the confidence combination, the redirect chain resolver, and the date-precision logic are all pure and all belong here. This is where Tier 1 lives, and it should be the fastest and largest part of the suite.
 
@@ -56,7 +56,7 @@ A note on ordering: **the SQLite spike (`runtime.md` §4) was a prerequisite, no
 
 ## 4. Tier 0 — Write-path integrity
 
-The unrecoverable tier. Every test here is guarding a property whose violation cannot be repaired by a rebuild.
+The unrecoverable tier. Every test here guards a property whose violation cannot be repaired by a rebuild.
 
 ### 4.1 The executor is the only writer
 
@@ -83,7 +83,7 @@ Tests:
 
 ### 4.3 Idempotency under replay
 
-`runtime.md` §3 gives the derivation directly:
+`runtime.md` §3 gives the derivation:
 
 ```
 capture_id  = hash(source, source_timestamp, content_hash)
@@ -117,7 +117,7 @@ This is where trust is won or lost, and it is almost entirely pure functions wit
 
 ### 5.1 The application policy rule table
 
-`triage.md` §3 gives seven rows. Every row gets a test, and the table below is the checklist:
+Every row of `triage.md` §3 gets a test:
 
 | Command kind | Expected | Test note |
 |---|---|---|
@@ -202,11 +202,11 @@ ADD §5.6 and `triage.md` §8. Optimistic concurrency on the Proposal's aggregat
 
 Extraction and adjudication cannot be asserted on. They are measured against a fixed corpus, and the corpus is the instrument.
 
-**The eval set is the gate** (ADR-0006, `runtime.md` §2). Its structure follows from ADR-0006's insight that a Correction records the counterfactual: each correction is an input/correct-output pair, and ADR-0006 sets ~50 as the minimum for a regression suite.
+**The eval set is the gate** (ADR-0006, `runtime.md` §2). Because a Correction records the counterfactual, each correction is an input/correct-output pair, and ADR-0006 sets ~50 as the minimum for a regression suite.
 
 ### 6.1 What the eval set measures
 
-Extraction is a pure function of the note text — it reads nothing but the text (ADD §5.2), and *that constraint is what makes it testable at all*. A stage that read current state would have output that changes as the database does, and no fixed corpus could pin it. This is worth stating in the plan because it means any future change letting extraction peek at the entity list destroys the eval set as an instrument, and should be treated as a breaking architectural change rather than an optimisation.
+Extraction is a pure function of the note text — it reads nothing but the text (ADD §5.2), and *that constraint is what makes it testable at all*. A stage that read current state would have output that changes as the database does, and no fixed corpus could pin it. Any future change letting extraction peek at the entity list destroys the eval set as an instrument, and is a breaking architectural change rather than an optimisation.
 
 Metrics, per provider and model version:
 
@@ -266,7 +266,7 @@ Recoverable failures, tested thoroughly but without Tier 0's adversarial standar
 
 ### 7.1 Rebuild determinism
 
-ADR-0005 makes rebuild routine rather than a disaster-recovery step, and ADD §11 says a corrupt projection is boring. That is only true if rebuild is reliable, which makes this the load-bearing test of the entire projection design.
+ADR-0005 makes rebuild routine rather than a disaster-recovery step, and ADD §11 says a corrupt projection is boring — but only if rebuild is reliable, which makes this the load-bearing test of the entire projection design.
 
 - **Property-based: for any event log, dropping every projection and rebuilding produces byte-identical projection state.** This single property is worth more than any number of example-based projection tests.
 - Rebuild from a snapshot equals rebuild from event zero (ADD §6).
@@ -401,7 +401,7 @@ The architectural commitment is tested separately and matters more than either: 
 
 ## 12. Execution order
 
-The order matters because some of these are prerequisites for the others being meaningful.
+Some of these are prerequisites for the others being meaningful.
 
 1. ~~**The SQLite spike** (`runtime.md` §4). Before schema work. It may change the design.~~ **Done — passed on all seven bars; the design is unchanged and schema work is unblocked.** Its results are the first baseline for the §8 suite.
 2. **Lint rules** (§4.1). From the first commit, per ADR-0001 and ADR-0003. Cheapest tests in the plan and they guard the most important boundary.

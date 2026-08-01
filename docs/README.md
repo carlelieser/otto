@@ -1,6 +1,6 @@
 # Otto — Documentation
 
-All decisions needed to begin implementation are settled. Nothing in this set contradicts anything else in it; where a conflict is found, it is a bug worth fixing rather than a judgement call to make at the keyboard.
+All decisions needed to begin implementation are settled. Where these documents conflict, it is a bug worth fixing rather than a judgement call to make at the keyboard.
 
 ## Read in this order
 
@@ -42,14 +42,14 @@ All decisions needed to begin implementation are settled. Nothing in this set co
 
 Two things ran first, in this order, because both can change the design:
 
-1. ~~**The SQLite spike**~~ ([`runtime.md`](./runtime.md) §4) — **done, passed on all seven bars.** The storage design is unchanged and schema work is unblocked. Results in [`runtime.md`](./runtime.md) §4; the harness was throwaway and is not kept.
+1. ~~**The SQLite spike**~~ ([`runtime.md`](./runtime.md) §4) — **done, passed on all seven bars.** The storage design is unchanged and schema work is unblocked. The harness was throwaway and is not kept.
 2. **Local extraction measurement** ([`runtime.md`](./runtime.md) §2) — whether a 7–8B model under grammar constraints clears the stated floor. Still to run, and now the assumption in Otto most likely to be wrong. ADR-0016 raises its stakes: local is the default path, so this measures what every user gets rather than a fallback.
 
 After those, [`qa.md`](./qa.md) §12 has the build order.
 
 ## What is deliberately unresolved
 
-Not oversights. Each names the signal that will answer it:
+Each names the signal that will answer it:
 
 - **Whether the thresholds are right.** They start strict; calibration moves them ([`triage.md`](./triage.md) §2).
 - **Whether salience v0 fails as predicted.** Brief instrumentation answers it ([`salience.md`](./salience.md) §3, §5).

@@ -48,7 +48,7 @@ The three alternatives and why they lost:
 
 ## 2. Local inference
 
-PRD §4.6 and ADR-0008 make local operation a requirement rather than a preference. That is only meaningful with named models and stated budgets, since "degrades to local" is otherwise an aspiration.
+PRD §4.6 and ADR-0008 make local operation a requirement rather than a preference. That is only meaningful with named models and stated budgets.
 
 ### Transcription
 
@@ -76,7 +76,7 @@ Name accuracy is the metric that matters, not general WER: "Sarah" transcribed a
 
 Otto is fully functional before any provider is configured and after one is removed. Cloud is an upgrade the user chooses for extraction quality, not a fallback entered on failure — which is why the table above is not ordered by preference.
 
-**The risk here is real and named**: schema-constrained extraction from a 7–8B model is the single most likely technical assumption in Otto to be wrong. Grammar-constrained decoding guarantees *parseable* output, not *correct* output — a local model reliably produces valid JSON and less reliably produces the right values in it. Making it the default puts that risk in front of every user rather than leaving it untested behind a cloud default, which is uncomfortable and correct (ADR-0016).
+**The risk here is named**: schema-constrained extraction from a 7–8B model is the single most likely technical assumption in Otto to be wrong. Grammar-constrained decoding guarantees *parseable* output, not *correct* output — a local model reliably produces valid JSON and less reliably produces the right values in it. Making it the default puts that risk in front of every user rather than leaving it untested behind a cloud default, which is uncomfortable and correct (ADR-0016).
 
 Three things keep that from being a surprise:
 
@@ -86,7 +86,7 @@ Three things keep that from being a surprise:
 
 **Extraction is decomposed for local runs when necessary.** If whole-note extraction proves unreliable at 8B, the fallback is several narrower prompts — mentions first, then fields per mention — trading latency for reliability. Latency is affordable here because the pipeline is asynchronous (ADD §4) and nobody is waiting.
 
-The floor Otto must clear, now that local is the default path rather than a supported alternative: **the local path produces a usable knowledge base with more review friction, not a corrupted one.** If the eval-set measurement shows an 8B model cannot clear that, the honest response is to raise the minimum local model size — not to quietly loosen thresholds, and not to restore a cloud default to hide it (ADR-0016). That measurement is the gate that remains — §4's storage spike has been run and passed, which leaves this the assumption in Otto most likely to be wrong.
+The floor Otto must clear: **the local path produces a usable knowledge base with more review friction, not a corrupted one.** If the eval-set measurement shows an 8B model cannot clear that, the honest response is to raise the minimum local model size — not to quietly loosen thresholds, and not to restore a cloud default to hide it (ADR-0016). That measurement is the gate that remains, now that §4's storage spike has passed.
 
 ### Embeddings
 
@@ -113,7 +113,7 @@ A retry with the same model produces the same ids and is idempotent. A re-run un
 
 ADD §12 flagged SQLite as assumed and unvalidated and said the spike belonged before schema work. It has now been run. **All seven bars pass, the closest by a factor of 20.** The storage assumption holds and schema work is unblocked.
 
-The harness was throwaway code and is not in the repository. The numbers below are the result it produced, and are the record of it.
+The harness was throwaway code and is not in the repository; the numbers below are the record of it.
 
 **Synthetic corpus**: 5 years of plausible single-user volume — 10,000 Captures, 41,240 events, 3,000 entities, 9,970 relations. Generated, not real, and biased toward the heavy end so a pass means comfortable rather than marginal.
 
@@ -127,9 +127,9 @@ The harness was throwaway code and is not in the repository. The numbers below a
 | Event append with WAL, sidecar writing | **0.1 ms** | ≤ 10 ms | > 50 ms |
 | Database size on disk | **47.8 MB** | ≤ 2 GB | > 10 GB |
 
-Latencies are p95 over 200–500 iterations rather than means, since the bars read as user-facing promises and a median hides the stall a user would notice. Measured on an M1 Max with SQLite 3.49.2 under WAL; stable across five seeds. Nothing landed in the band between pass and fail.
+Latencies are p95 over 200–500 iterations rather than means, since the bars read as user-facing promises and a median hides the stall a user would notice. Measured on an M1 Max with SQLite 3.49.2 under WAL; stable across five seeds.
 
-Between pass and fail is the band where the design holds but needs attention — a snapshot cadence tightened, an index added. Nothing is in it, and the bars remain the standing performance suite (`qa.md` §8) precisely so that a later change that puts something there is caught.
+Between pass and fail is the band where the design holds but needs attention — a snapshot cadence tightened, an index added. Nothing landed in it, and the bars remain the standing performance suite (`qa.md` §8) precisely so that a later change that puts something there is caught.
 
 **Where it breaks.** The bars are defined at ×1; the corpus generator scaled, so the useful question is where the design stops holding rather than by how much it passes.
 
@@ -179,11 +179,11 @@ Full rebuild is 215 ms at the specified corpus and 15 s at 25× it — one milli
 
 ## 5. Captures, transcripts, and correction
 
-Captures are immutable (ADR-0005, ADD §5.1). Transcription is imperfect (§2). Those two facts collide, and the collision needs an answer that does not weaken the immutability rule.
+Captures are immutable (ADR-0005, ADD §5.1) and transcription is imperfect (§2). Reconciling those needs an answer that does not weaken the immutability rule.
 
 **The Capture stores both the raw transcript and, optionally, a user-corrected text.** Both are immutable once written; correcting a transcript appends a `CaptureTranscriptCorrected` event carrying the corrected text, and the original is never overwritten. The corrected text becomes what Extraction reads.
 
-This keeps the rule intact — nothing is mutated, the correction is an event like any other, and provenance can still name exactly what text produced a given fact. It also means a mis-transcribed name is fixable by the user in one step rather than being a permanent wrong entity.
+This keeps the rule intact — nothing is mutated, and provenance can still name exactly what text produced a given fact. It also means a mis-transcribed name is fixable in one step rather than being a permanent wrong entity.
 
 **Correcting a transcript re-runs the pipeline for that Capture**, under the re-extraction rules in §3. This is the one case where re-extraction is automatic, because the user has explicitly said the input was wrong.
 

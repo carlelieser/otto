@@ -4,7 +4,7 @@
 Status: accepted
 ---
 
-ADR-0005 accepted event sourcing and left four mechanisms undesigned, each of which it correctly identified as a consequence rather than a choice. They are settled together here because they are one decision seen from four sides: **an append-only log is never rewritten, so everything that would otherwise be a migration becomes a read-time or apply-time operation instead.**
+ADR-0005 accepted event sourcing and left four mechanisms undesigned. They are settled together here because they are one decision seen from four sides: **an append-only log is never rewritten, so everything that would otherwise be a migration becomes a read-time or apply-time operation instead.**
 
 **Snapshotting is a projection concern, not an aggregate one.** Rebuilds periodically write a snapshot of each projection together with the log position it reflects, and a rebuild resumes from the most recent snapshot rather than from event zero. Snapshots are themselves derived and disposable, so a corrupt or stale one is fixed by deleting it and replaying fully. The alternative — per-aggregate snapshots, the conventional event-sourcing answer — solves a problem Otto does not have, since nothing in Otto loads an aggregate by folding its events (ADR-0010 made reads plain queries against projections). Snapshotting the projection keeps rebuild cost proportional to recent activity with no per-aggregate machinery.
 

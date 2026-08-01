@@ -2,17 +2,17 @@
 
 > Status: accepted for MVP. Product requirements live in [`prd.md`](./prd.md); vocabulary in [`CONTEXT.md`](../CONTEXT.md); settled decisions in [`docs/adr/`](./adr/).
 >
-> This document describes the whole MVP: the write path, the read path, enrichment, the runtime, and the data model. Where an ADR has already decided something, this document does not re-argue it — it says how the decision is realised. Four companion specifications carry the detail this document only sketches: [`schema.md`](./schema.md) is the field-level model, [`triage.md`](./triage.md) the confidence and disposition rules, [`runtime.md`](./runtime.md) the process model and local inference, and [`salience.md`](./salience.md) the surfacing rules. Where something is genuinely undecided, §12 says so rather than inventing an answer.
+> This document describes the whole MVP: the write path, the read path, enrichment, the runtime, and the data model. Where an ADR has already decided something, this document says how the decision is realised rather than re-arguing it. Four companion specifications carry the detail this document only sketches: [`schema.md`](./schema.md) is the field-level model, [`triage.md`](./triage.md) the confidence and disposition rules, [`runtime.md`](./runtime.md) the process model and local inference, and [`salience.md`](./salience.md) the surfacing rules. §12 covers what is genuinely undecided.
 
 ## 1. What this architecture has to be good at
 
-Otto is a single-user desktop application that turns prose into a maintained knowledge base. Four properties of that job drive every structural decision below; nothing else about the system is unusual enough to shape it.
+Otto is a single-user desktop application that turns prose into a maintained knowledge base. Four properties of that job drive every structural decision below.
 
 **It is probabilistic in the middle and exact at the edges.** Text arrives, an LLM reads it, and something definite happens to the user's data. The interesting failures live at the transition. The architecture's central move is to make that transition a place: a directory that cannot write (ADR-0003), a single executor that can, and an explicit stage between them where uncertainty turns into a decision.
 
 **Its history is part of what it stores.** Otto's subject is not the current state of the user's knowledge but how that understanding changed (ADR-0002). The event log is therefore the model, not an audit trail beside it (ADR-0005), and every read surface is derived from it.
 
-**Trust is the product metric** (PRD §8). Architecturally that means provenance is not a feature bolted to the side — every fact the UI shows must be able to name the Capture it came from, the Proposal that produced it, and the model that inferred it. That is a constraint on the data model, not on the UI.
+**Trust is the product metric** (PRD §8). Every fact the UI shows must be able to name the Capture it came from, the Proposal that produced it, and the model that inferred it. That is a constraint on the data model, not on the UI.
 
 **It must run entirely on one machine.** Cloud inference is an option, never a requirement (ADR-0008). This forces every LLM interaction through a port narrow enough that a local model can satisfy it, and it forces the latency budget to assume the slow case.
 
@@ -82,7 +82,7 @@ Read it as three claims. Everything probabilistic is in one box and none of it t
 
 ## 3. Layers and the rules between them
 
-The tree is ADR-0001's, with the surface and enrichment paths — undesigned when those ADRs were written — now placed.
+The tree is ADR-0001's, with the surface and enrichment paths now placed.
 
 ```
 src/
@@ -189,7 +189,7 @@ flowchart TB
 
 ### 5.1 Ingestion
 
-Ingestion turns arriving input into a Capture and stops. Transcription, whitespace and transcript cleanup, timestamping, and idempotency — nothing that requires understanding what the text means. The rule is worth enforcing because the temptation is constant: "while we're here, we could notice this note has a date in it." That noticing belongs to extraction, and moving it earlier is what turns a normaliser into a second, undisciplined extractor.
+Ingestion turns arriving input into a Capture and stops. Transcription, whitespace and transcript cleanup, timestamping, and idempotency — nothing that requires understanding what the text means. The temptation is constant: "while we're here, we could notice this note has a date in it." That noticing belongs to extraction, and moving it earlier turns a normaliser into a second, undisciplined extractor.
 
 The Capture is written before anything downstream runs, and is never modified afterwards. Everything Otto later believes points back to it.
 
@@ -227,7 +227,7 @@ This stage is where hallucination is structurally prevented. The model never emi
 
 ### 5.5 Triage: two questions, two homes
 
-ADR-0007 splits triage across layers, and the split is worth restating because it is the least obvious thing in the tree.
+ADR-0007 splits triage across layers, and it is the least obvious thing in the tree.
 
 `inference/calibration/` answers *"is this proposal likely enough to be correct?"* — a question about how well Otto's pipeline performs, using thresholds keyed by provider and model version. Delete Otto and the question vanishes with it.
 
@@ -270,7 +270,7 @@ flowchart LR
 
 **Reads never touch the log.** The UI queries projections exclusively. Reading current state by folding events would make every screen a replay, and with entities carrying real fields (ADR-0010) the projection is a plain row — the Person view is a select, not a synthesis.
 
-**Every read surface tolerates staleness.** Projections lag the log by however long the projection worker takes. This is a real constraint on the UI, not a theoretical one: after the user approves a proposal, the entity list may not reflect it for a moment. The dashboard handles this by treating an applied event as immediately true in the local view, rather than by blocking on the projection catching up.
+**Every read surface tolerates staleness.** Projections lag the log by however long the projection worker takes: after the user approves a proposal, the entity list may not reflect it for a moment. The dashboard handles this by treating an applied event as immediately true in the local view, rather than by blocking on the projection catching up.
 
 **Corrections append, never edit.** A correction is a compensating event followed by a projection update. History stays intact, which is what makes "why does Otto think this?" answerable months later.
 
@@ -282,7 +282,7 @@ flowchart LR
 
 ## 7. The read path
 
-The write path was designed first and is where the ADRs concentrate. The read path is simpler, and its simplicity is a direct dividend of ADR-0010: because entities carry fields, most of what the dashboard needs is a query rather than a computation.
+The read path is simpler than the write path, and its simplicity is a direct dividend of ADR-0010: because entities carry fields, most of what the dashboard needs is a query rather than a computation.
 
 **Entity views** are a select against the entity projection plus its relations. The Person view — what Otto knows, which projects, which events, open follow-ups, last contact — is a row and a handful of joins.
 
@@ -336,11 +336,11 @@ The field-level model is in [`schema.md`](./schema.md); what matters architectur
 
 The distinction is worth policing in the schema itself — derived tables live in their own namespace, so "is this rebuildable?" is answerable by looking at the name rather than by reading the projection code.
 
-**SQLite was assumed, and the spike has now validated it.** ADR-0005 flagged this as unvalidated and it stayed that way until it became a measurement with stated pass and fail bars over a synthetic five-year corpus (`runtime.md` §4, ADR-0013). All seven bars pass, the closest by a factor of 20. Vector search was named the likeliest failure since it is the one thing SQLite does not do natively; the spike cleared its bar by 330×, so the fallback — a separate index rebuilt from the log like any other projection — is not needed and should not be built. The extension Otto ships is SQLite-Vector 1.0, which is not the one the spike measured (`runtime.md` §4.3). It remains cheap to reach for later precisely because embeddings are already derived state.
+**SQLite was assumed, and the spike has now validated it** — pass and fail bars over a synthetic five-year corpus (`runtime.md` §4, ADR-0013). All seven bars pass, the closest by a factor of 20. Vector search was named the likeliest failure since it is the one thing SQLite does not do natively; the spike cleared its bar by 330×, so the fallback — a separate index rebuilt from the log like any other projection — is not needed and should not be built. It remains cheap to reach for later precisely because embeddings are already derived state. The extension Otto ships is SQLite-Vector 1.0, not the one the spike measured (`runtime.md` §4.3).
 
 ## 11. Failure and degradation
 
-The failure modes worth designing for are the ones that would break trust, since trust is the metric (PRD §8).
+The failure modes worth designing for are the ones that would break trust (PRD §8).
 
 **The LLM is unavailable.** Capture still works — it is the one path with no inference in it. Captures accumulate at the extraction stage and drain when a provider returns. The user loses timeliness, never data. This is the same mechanism as PRD §4.7's restartability, and it is why the pipeline is resumable per stage.
 

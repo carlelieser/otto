@@ -22,8 +22,6 @@ One person: the user Otto belongs to. Otto is single-user by construction — no
 
 ## 4. Principles
 
-These constrain every requirement below.
-
 1. **Capture costs nothing.** One place, no decisions, no taxonomy. If capture takes more than a few seconds the user won't do it consistently, and everything downstream is worthless.
 2. **The knowledge base maintains itself.** Otto updates what it knows as new notes arrive. The user never files, tags, or reconciles.
 3. **Trust is a feature, not a side effect.** The user can always see what Otto did and why, and correcting it is one step. Errors that feel mysterious kill adoption faster than errors that are visible.
@@ -74,7 +72,7 @@ Four things arrive here:
 
 Confident, non-destructive changes apply automatically and appear in the queue as a record rather than a request. The user can still correct them.
 
-**Proposals below the low bar are recorded but not acted on**, and appear in a collapsed section the user never has to open. Otto does not drop things silently; "why didn't it pick that up?" has an answer.
+**Proposals below the low bar are recorded but not acted on**, and appear in a collapsed section the user never has to open. "Why didn't it pick that up?" has an answer.
 
 Correcting is one action from the queue and does not require navigating to the entity.
 
@@ -90,7 +88,7 @@ Corrections are revisions of belief, not repairs of an error. Nothing is deleted
 
 ### 5.6 Duplicates
 
-Otto would rather create a second Sarah than attach a fact to the wrong one — a duplicate is visible and fixable, a misattribution quietly corrupts what the user knows (ADR-0009). That choice makes duplicates the expected outcome rather than a defect, so Otto has to be able to undo them.
+Otto would rather create a second Sarah than attach a fact to the wrong one — a duplicate is visible and fixable, a misattribution quietly corrupts what the user knows (ADR-0009). That makes duplicates an expected outcome rather than a defect, so Otto has to be able to undo them.
 
 Two things handle this. When Otto considers creating an entity that resembles one it already has, it asks rather than deciding (`triage.md` §3). And when duplicates exist anyway, Otto notices and offers to combine them from the review queue — the user confirms, and the two become one, with nothing lost from either.
 
@@ -106,7 +104,7 @@ Otto surfaces what deserves attention on a cadence, in the dashboard.
 
 Briefs are generated from the knowledge base, not from raw notes — which is what makes them possible at all. They are surfaced in the dashboard rather than pushed, though a tray badge indicates a new brief is waiting.
 
-**Selection rules ship deliberately crude.** What makes something worth surfacing — recency, open loops, imminence, and the thing that has gone quiet — is specified in `salience.md` as a v0 that is legible rather than clever, along with a written list of what it is known to get wrong. It ships that way because briefs cannot wait for usage data that only shipping produces, and because salience is derived: replacing the rules recomputes over all history rather than migrating anything. Expect the first version to over-weight whatever the user wrote about most recently.
+**Selection rules ship deliberately crude.** What makes something worth surfacing — recency, open loops, imminence, and the thing that has gone quiet — is specified in `salience.md` as a v0 that is legible rather than clever, with a written list of what it is known to get wrong. Briefs cannot wait for usage data that only shipping produces, and salience is derived: replacing the rules recomputes over all history rather than migrating anything. Expect the first version to over-weight whatever the user wrote about most recently.
 
 ## 6. What Otto does not do
 
@@ -168,8 +166,6 @@ The failure mode to watch for is the one that kills every system in this categor
 
 **No product question blocks implementation.** The four that did are answered: salience and brief content in `salience.md`, the sampling rate in `triage.md` §6, and the split default in ADR-0009 (unclassified values stay with the original identity).
 
-What remains is one technical gate and a set of things that can only be answered by use.
-
 **Gating implementation:** the local-extraction quality measurement (ADR-0013), which decides whether the stated minimum local model is honest. The SQLite spike (`runtime.md` §4) was the other gate and has been run — it passed on all seven bars, so the storage design stands and schema work is unblocked.
 
 **Answerable only by using Otto**, and instrumented so that the answers arrive as data rather than opinion:
@@ -180,4 +176,4 @@ What remains is one technical gate and a set of things that can only be answered
 - Whether the field schema is missing fields — visible as the same fact being reinvented in `notes` (`schema.md` §7).
 - Whether the review burden during bootstrap is tolerable, or whether 50 corrections is too long to wait.
 
-Each of these names the signal that answers it. That is the intended posture: ship the crude version with instrumentation, and let use answer what deliberation cannot.
+Each of these names the signal that answers it. The intended posture: ship the crude version with instrumentation, and let use answer what deliberation cannot.
