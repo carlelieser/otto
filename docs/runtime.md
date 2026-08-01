@@ -109,7 +109,15 @@ proposal_id  = hash(capture_id, stage, provider, model_version, ordinal)
 
 A retry with the same model produces the same ids and is idempotent. A re-run under a new model produces new ids, and its Proposals arrive as ordinary Proposals subject to ordinary triage. Both behaviours fall out of one rule.
 
-**The inputs need pinning, because dedup is only as stable as its least-specified term.** The hash is SHA-256 truncated to 32 hex characters, matching the event-id derivation Slice 0 settled — two id schemes in one system invites a third. `content_hash` covers the raw text (§5). `source_timestamp` is ISO 8601, millisecond precision, UTC, since one instant formatted two ways hashes two ways.
+**The inputs need pinning, because dedup is only as stable as its least-specified term.** Naming a hash function is not enough — a separator, a field order, and a digest width are all places two implementations diverge silently and produce duplicate Captures:
+
+```
+content_hash = sha256_hex(raw_text)                        // 64 chars
+capture_id   = "cap-"  + sha256_hex([source, source_timestamp, content_hash].join(" ")).slice(0, 32)
+proposal_id  = "prop-" + sha256_hex([capture_id, stage, provider, model_version, String(ordinal)].join(" ")).slice(0, 32)
+```
+
+`sha256_hex` is SHA-256 over UTF-8, lowercase hex, no algorithm prefix. The single-space separator and 32-character truncation match the event-id derivation Slice 0 settled — two id schemes in one system invites a third. `content_hash` covers the raw text (§5), before normalisation, so changing a normalisation rule cannot re-key an existing corpus. `source_timestamp` is ISO 8601, millisecond precision, UTC, since one instant formatted two ways hashes two ways.
 
 For a voice Capture, `source_timestamp` is **when recording started**. Recording end and transcription-completion are both properties of the run rather than the input: transcription varies in duration, so either would give a re-upload of identical audio a different id and produce the duplicate Capture this section exists to prevent.
 

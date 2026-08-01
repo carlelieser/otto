@@ -1,6 +1,6 @@
-# Slice 2 — Extraction
+# Slice 3 — Extraction
 
-> Depends on: Slice 1. Blocks: Slice 3.
+> Depends on: Slice 2. Blocks: Slice 4.
 > Sources: [`add.md`](../add.md) §5.2, §9; [`schema.md`](../schema.md) §1, §7, §8; [`runtime.md`](../runtime.md) §2, §3; [`qa.md`](../qa.md) §6; ADR-0008, ADR-0013, ADR-0016.
 >
 > **This slice carries the one open gate in the project.** See "The measurement" below.
@@ -39,7 +39,7 @@ If the floor is not cleared, the response is a larger minimum local model — ne
 
 **Date resolution with precision markers** (`schema.md` §8). The Capture timestamp is given to the extractor as context and dates come back absolute, each with `exact`, `day`, `month`, `quarter`, `year`, or `relative_unresolved`. "Sometime next quarter" and "on the 4th" must not become indistinguishable timestamps. `relative_unresolved` stores no timestamp, keeps the phrase, and is excluded from anything time-ordered.
 
-**`p(extraction)` reported and kept separate** from resolution's confidence throughout (`triage.md` §1). It is the model's self-report and has no scorer behind it, which is why Slice 4 treats it as a floor rather than a probability.
+**`p(extraction)` reported and kept separate** from resolution's confidence throughout (`triage.md` §1). It is the model's self-report and has no scorer behind it, which is why Slice 5 treats it as a floor rather than a probability.
 
 **Provider and model version recorded on everything produced**, and folded into `proposal_id` per `runtime.md` §3. Schema-constrained output at temperature 0.
 
@@ -49,11 +49,11 @@ If the floor is not cleared, the response is a larger minimum local model — ne
 
 ## Not in scope
 
-- **Resolution.** Slice 3. Extraction produces Mentions; which entity a Mention refers to is a different question and a different confidence.
-- **The differ and Commands.** Slice 3. The model never emits a Command — that is where hallucination is structurally prevented.
-- **Triage and thresholds.** Slice 4. Extraction reports a number; nothing acts on it yet.
-- **Re-extraction as a user action.** The id derivation supporting it ships here; the scoped manual re-extraction tool is Slice 8's neighbour and can follow it.
-- **Embeddings.** Slice 3, where candidate generation needs them.
+- **Resolution.** Slice 4. Extraction produces Mentions; which entity a Mention refers to is a different question and a different confidence.
+- **The differ and Commands.** Slice 4. The model never emits a Command — that is where hallucination is structurally prevented.
+- **Triage and thresholds.** Slice 5. Extraction reports a number; nothing acts on it yet.
+- **Re-extraction as a user action.** The id derivation supporting it ships here; the scoped manual re-extraction tool is Slice 9's neighbour and can follow it.
+- **Embeddings.** Slice 4, where candidate generation needs them.
 
 ## Build order
 
@@ -80,7 +80,7 @@ Deterministic tests that do belong here:
 - **The full pipeline runs green with no provider configured** (`qa.md` §6.3). The unconfigured state is the primary configuration, not an edge case.
 - Removing a previously-configured provider leaves Otto functional rather than stalled.
 - Resumability: a crash after extraction resumes at the next stage rather than re-invoking the extractor.
-- Capture stays responsive while a long local extraction runs (`qa.md` §8) — the Slice 1 test, now with real load behind it.
+- Capture stays responsive while a long local extraction runs (`qa.md` §8) — the Slice 2 test, now with real load behind it.
 
 ## Done when
 

@@ -1,6 +1,6 @@
-# Slice 6 — Review queue
+# Slice 7 — Review queue
 
-> Depends on: Slice 5. Blocks: Slices 7, 8, 10.
+> Depends on: Slice 6. Blocks: Slices 8, 9, 11.
 > Sources: [`prd.md`](../prd.md) §5.4, §5.5; [`add.md`](../add.md) §7; [`triage.md`](../triage.md) §4, §6, §7; [`qa.md`](../qa.md) §7.7, §10; ADR-0006.
 
 ## What it closes
@@ -21,7 +21,7 @@ It also unblocks three slices at once. Merge (7) is confirmed from the queue, tr
 
 - Proposals Otto was not confident enough to apply unattended, which wait for a decision before anything changes.
 - Destructive proposals — removals and merges — which wait regardless of confidence. Splits too, if they ever arrive.
-- Suspected duplicates, offered as a merge (the entries arrive in Slice 7; the queue's shape accommodates them here).
+- Suspected duplicates, offered as a merge (the entries arrive in Slice 8; the queue's shape accommodates them here).
 - **A sampled slice of confident changes** Otto could have applied unattended and deliberately did not. These are **indistinguishable from ordinary entries and are not marked as tests** — the mark exists in the data for calibration, and must not reach the UI, or the user's adjudication is biased by knowing they are being measured.
 
 **Confident, non-destructive changes appear as a record rather than a request.** They applied automatically; the queue shows them so they remain visible and correctable rather than silent.
@@ -42,11 +42,11 @@ It also unblocks three slices at once. Merge (7) is confirmed from the queue, tr
 
 ## Not in scope
 
-- **Merge execution.** Slice 7. The queue accommodates a suspected-duplicate entry shape; nothing produces or applies one yet.
-- **Transcript correction.** Slice 8. It is a correction of the *input*, not of a Proposal, and needs its own re-extraction path.
+- **Merge execution.** Slice 8. The queue accommodates a suspected-duplicate entry shape; nothing produces or applies one yet.
+- **Transcript correction.** Slice 9. It is a correction of the *input*, not of a Proposal, and needs its own re-extraction path.
 - **Split.** Never, in MVP (PRD §7.2, ADR-0009). Test that no split path exists.
 - **Threshold calibration tooling** that consumes the corrections. Post-MVP (PRD §7.2) — the data is gathered here, the tuner is not built.
-- **Full dashboard chrome.** Slice 10. The queue is a working surface here, not a styled one inside a navigation shell.
+- **Full dashboard chrome.** Slice 11. The queue is a working surface here, not a styled one inside a navigation shell.
 
 ## Build order
 
