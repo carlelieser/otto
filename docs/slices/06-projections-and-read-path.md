@@ -1,6 +1,6 @@
-# Slice 5 — Projections and the read path
+# Slice 6 — Projections and the read path
 
-> Depends on: Slice 4. Blocks: Slices 6, 9, 10.
+> Depends on: Slice 5. Blocks: Slices 7, 10, 11.
 > Sources: [`add.md`](../add.md) §6, §7; [`runtime.md`](../runtime.md) §4, §4.1; [`qa.md`](../qa.md) §7.1, §7.5, §8; ADR-0005, ADR-0011.
 
 ## What it closes
@@ -19,7 +19,7 @@ The write path is complete and the log has events in it, which is the prerequisi
 
 **The projection worker**, in its own process so that a full rebuild never blocks capture or the pipeline (`add.md` §4). Rebuild is a routine operation, not a disaster-recovery step (ADR-0005).
 
-**The derived tables** (`add.md` §10): `person`, `project`, `idea`, `event`, `task` with real typed fields, each carrying a pointer to the event that last set it; `relations`; `redirects` (the table exists here, Slice 7 writes to it); `proposals` and their dispositions; `corrections` (written in Slice 6). Search indexes, embeddings, salience, and snapshots complete the set.
+**The derived tables** (`add.md` §10): `person`, `project`, `idea`, `event`, `task` with real typed fields, each carrying a pointer to the event that last set it; `relations`; `redirects` (the table exists here, Slice 8 writes to it); `proposals` and their dispositions; `corrections` (written in Slice 7). Search indexes, embeddings, salience, and snapshots complete the set.
 
 **Derived tables live in their own namespace** (`add.md` §10), so "is this rebuildable?" is answerable by looking at the name rather than by reading the projection code.
 
@@ -29,7 +29,7 @@ The write path is complete and the log has events in it, which is the prerequisi
 
 **Staleness tolerance as a contract.** Projections lag the log by however long the worker takes. Every read surface tolerates this, and the dashboard handles it by treating an applied event as immediately true in the local view rather than blocking on the projection catching up (`add.md` §6).
 
-**Full-text search** over Captures and entity fields, using SQLite FTS. Note the boundary: semantic search over notes is post-MVP (PRD §7.2), and the embeddings from Slice 3 exist for candidate generation rather than for user-facing search.
+**Full-text search** over Captures and entity fields, using SQLite FTS. Note the boundary: semantic search over notes is post-MVP (PRD §7.2), and the embeddings from Slice 4 exist for candidate generation rather than for user-facing search.
 
 **Entity reads** in `application/surface/` — the Person view as a row and a handful of joins, which is the dividend ADR-0010 pays.
 
@@ -37,14 +37,14 @@ The write path is complete and the log has events in it, which is the prerequisi
 
 **Correctness checks alongside the timings.** A rebuild that silently no-ops is very fast. Projections populate, single-valued fields hold the last event's value, a second rebuild is byte-identical to the first, partial-plus-catch-up equals a full rebuild, provenance resolves through to model and confidence. These caught two corpus bugs during the spike that would have made its numbers meaningless.
 
-**Entity names as a transcription initial prompt** (`runtime.md` §2), deferred from Slice 1 — the entity projection now exists to draw names from. Test with and without, since the mitigation is only worth its complexity if it measurably improves proper-noun recall.
+**Entity names as a transcription initial prompt** (`runtime.md` §2), deferred from Slice 2 — the entity projection now exists to draw names from. Test with and without, since the mitigation is only worth its complexity if it measurably improves proper-noun recall.
 
 ## Not in scope
 
-- **Salience.** Slice 9, though it is a projection and lands in the machinery built here.
-- **The review queue as a surface.** Slice 6. The `proposals` projection exists here; the UI over it does not.
-- **Duplicate detection.** Slice 7, also a projection.
-- **The dashboard.** Slice 10. Reads are exposed through the command surface and exercised by tests, not by a window.
+- **Salience.** Slice 10, though it is a projection and lands in the machinery built here.
+- **The review queue as a surface.** Slice 7. The `proposals` projection exists here; the UI over it does not.
+- **Duplicate detection.** Slice 8, also a projection.
+- **The dashboard.** Slice 11. Reads are exposed through the command surface and exercised by tests, not by a window.
 - **Semantic search.** Post-MVP (PRD §7.2). The seam is a projection over embeddings that already exist.
 
 ## Build order

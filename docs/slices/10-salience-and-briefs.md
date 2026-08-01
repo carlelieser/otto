@@ -1,6 +1,6 @@
-# Slice 9 — Salience and briefs
+# Slice 10 — Salience and briefs
 
-> Depends on: Slice 5. Independent of Slices 7 and 8.
+> Depends on: Slice 6. Independent of Slices 8 and 9.
 > Sources: [`prd.md`](../prd.md) §5.7; [`add.md`](../add.md) §8; [`salience.md`](../salience.md) (all); [`qa.md`](../qa.md) §11; ADR-0015.
 
 ## What it closes
@@ -9,7 +9,7 @@ Otto surfaces what deserves attention on a cadence: a daily brief readable in un
 
 ## Why here
 
-It needs projections (Slice 5) and nothing else. It is independent of the review queue's downstream slices, so it can be built in parallel with merge and transcript correction.
+It needs projections (Slice 6) and nothing else. It is independent of the review queue's downstream slices, so it can be built in parallel with merge and transcript correction.
 
 **It ships knowingly crude, and that is the design** (ADR-0015). Briefs cannot wait for usage data that only shipping produces. What makes shipping a crude version safe is that salience is derived: replacing the rules is a rebuild rather than a migration, and there is no accumulated state to be wrong. The cost of a bad v0 is a few weeks of mediocre briefs; the cost of waiting is no briefs at all.
 

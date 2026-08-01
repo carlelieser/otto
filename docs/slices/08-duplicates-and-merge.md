@@ -1,6 +1,6 @@
-# Slice 7 — Duplicates and merge
+# Slice 8 — Duplicates and merge
 
-> Depends on: Slice 6. Independent of Slices 8 and 9.
+> Depends on: Slice 7. Independent of Slices 9 and 10.
 > Sources: [`prd.md`](../prd.md) §5.6; [`add.md`](../add.md) §6; [`triage.md`](../triage.md) §5; [`qa.md`](../qa.md) §7.4; ADR-0009, ADR-0012.
 
 ## What it closes
@@ -13,7 +13,7 @@ This closes the cost of a bias taken deliberately upstream. Resolution prefers "
 
 Merge is in MVP as a **scope addition to PRD §7.1, made deliberately** (ADR-0012, `triage.md` §5): the alternative is an MVP whose knowledge base degrades with use and has no remedy. It comes after the review queue because a merge is confirmed from the queue and never happens unattended at any confidence.
 
-It is cheap here for a specific reason: **duplicate detection is candidate generation pointed at the entity table instead of at a Mention**, so it reuses machinery Slice 3 already built.
+It is cheap here for a specific reason: **duplicate detection is candidate generation pointed at the entity table instead of at a Mention**, so it reuses machinery Slice 4 already built.
 
 ## In scope
 
@@ -27,7 +27,7 @@ Redirects are invisible to the user. They exist because references made before a
 
 **Lossless field conflict resolution** (`triage.md` §5): the survivor's value is kept and the loser's moves into `notes`. This needs no interface, which is exactly why minimal merge can ship without the full ADR-0009 affordance.
 
-**Merge always waits for the user**, at any confidence, per the application policy row Slice 4 already built and tested at 1.0.
+**Merge always waits for the user**, at any confidence, per the application policy row Slice 5 already built and tested at 1.0.
 
 ## Not in scope
 
@@ -37,7 +37,7 @@ Redirects are invisible to the user. They exist because references made before a
 
 ## Build order
 
-1. The similarity projection over the entity table, reusing Slice 3's candidate generation.
+1. The similarity projection over the entity table, reusing Slice 4's candidate generation.
 2. Suspected-duplicate entries into the review queue.
 3. `EntitiesMerged` through the executor, and the `redirects` projection.
 4. Transitive chain resolution in reads.
@@ -56,7 +56,7 @@ Tier 2 (`qa.md` §7.4), with the transitivity property carrying the most rigour:
 - **Nothing in history is rewritten.** Every event against the merged-away id remains exactly as it was.
 - Duplicate detection surfaces suspected pairs into the review queue.
 - **Split is not implemented.** Test that no split path exists.
-- Merge never auto-applies at any confidence — the Slice 4 policy test, re-verified against the real merge path.
+- Merge never auto-applies at any confidence — the Slice 5 policy test, re-verified against the real merge path.
 
 ## Done when
 
