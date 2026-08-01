@@ -48,7 +48,7 @@ This is also the slice where `schema.md` stops being a document and becomes data
 ## Build order
 
 1. The knowledge model — five entity types, typed fields per `schema.md`, and the relation vocabulary with its type-pair constraints.
-2. `*Repository` ports, read-only from `inference/`'s perspective, with in-memory adapters.
+2. `*Repository` ports, read-only from `inference/`'s perspective, over SQLite. Storage ports get one adapter (`add.md` §9): `:memory:` is the offline mode, so a separate in-memory implementation buys nothing and can silently disagree with the real one.
 3. `Embedder` port and local adapter; SQLite-Vector integration, re-measurement, and the licence check.
 4. Candidate generation: alias, fuzzy, and vector.
 5. Scoring, producing `p(resolution)` from the scorer's features.

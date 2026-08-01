@@ -1,0 +1,5 @@
+// Deliberately violates: domain/ imports nothing else in src/.
+// Written as it would appear at src/domain/events/.
+import type { EventStore } from "../../ports/event-store.js";
+
+export type Store = EventStore;

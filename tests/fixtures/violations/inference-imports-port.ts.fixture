@@ -1,0 +1,6 @@
+// Deliberately violates: no module under inference/ imports the event store port.
+// Written as it would appear at src/inference/resolution/. Stored as a .fixture
+// so it is never compiled or linted as real source.
+import type { EventStore } from "../../ports/event-store.js";
+
+export const store: EventStore | undefined = undefined;

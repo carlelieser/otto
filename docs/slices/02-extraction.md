@@ -57,7 +57,7 @@ If the floor is not cleared, the response is a larger minimum local model — ne
 
 ## Build order
 
-1. `Extractor` port and the in-memory adapter, so the pipeline runs with no model at all.
+1. `Extractor` port and the in-memory adapter, so the pipeline runs with no model at all. This is the case where a second adapter *is* load-bearing (`add.md` §9): there is no offline mode for an LLM, so without a stub returning canned output nothing downstream of extraction is testable.
 2. Output schema generation from `schema.md`'s tables, with unknown-field rejection at parse time.
 3. The local adapter — GBNF constraints against the generated schema.
 4. Date resolution and `date_precision`.

@@ -27,7 +27,7 @@ The process model has to be settled here too, because capture is what forces thr
 
 **Voice capture and transcription.** `whisper.cpp` with `small.en`, bundled, via the `Transcriber` port (`runtime.md` §2). The one port where local is non-negotiable — a capture path requiring a network is not a local-first system. Budget: ≤ 2× realtime on an 8-core consumer machine.
 
-**The `CaptureStore` port** and its two adapters, separate from the `EventStore` because Captures are input, not change (`add.md` §9).
+**The `CaptureStore` port** and its SQLite adapter, separate from the `EventStore` because Captures are input, not change (`add.md` §9). One adapter — `:memory:` is the offline mode for a storage port.
 
 **The `captures` table** — immutable, one row per thing the user put in, with source, raw text, timestamp, and idempotency key (`add.md` §10). Insert-only at both the application and SQLite levels, the same double enforcement Slice 0 built for `events`.
 
@@ -49,7 +49,7 @@ The process model has to be settled here too, because capture is what forces thr
 
 1. Tauri host, Node sidecar, and the JSON-RPC-over-stdio transport between them. Prove a round trip.
 2. Supervisor with backoff restart, and the crash-loop degradation path.
-3. `CaptureStore` port, in-memory and SQLite adapters, `captures` table with insert-only enforcement.
+3. `CaptureStore` port and its SQLite adapter. One adapter, per `add.md` §9 — `:memory:` is the offline mode, and a second implementation of a storage port is what Slice 0 removed. The `captures` table and its insert-only triggers already exist from Slice 0; this adds the repository-level half of `qa.md` §4.1's pair, which could not be written without the port.
 4. Ingestion: normalisation, timestamping, and the `capture_id` derivation.
 5. Typed capture through the tray to a durable Capture, emitting `CaptureIngested` through Slice 0's executor.
 6. `Transcriber` port and the `whisper.cpp` adapter; voice capture through the same path.

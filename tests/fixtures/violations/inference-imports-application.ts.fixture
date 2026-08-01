@@ -1,0 +1,5 @@
+// Deliberately violates: no module under inference/ imports anything from application/.
+// Written as it would appear at src/inference/proposal/.
+import { executeCommand } from "../../application/pipeline/execute-command.js";
+
+export const execute = executeCommand;

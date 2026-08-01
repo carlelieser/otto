@@ -122,6 +122,8 @@ Four rules hold it together, and three of them are lint-enforced from the first 
 
 The fourth is not mechanically checkable in general, but its most likely violation is: a grep for `confidence` under `domain/` runs in CI alongside the import rules.
 
+**The grep exempts `domain/values/provenance.ts`, and nothing else.** §10 requires the event row to carry "the confidence at the time" as part of its provenance, so the one place under `domain/` that must name a Confidence is the record describing an inference. That is the rule's subject matter rather than a violation of it — the rule is about knowledge and about the application policy, which is asked about a kind of change and never about a number. The exemption is one file wide deliberately: a knowledge type or a policy naming a Confidence still fails the build, and so does a sibling of provenance in the same directory. Renaming the field to satisfy the grep is the wrong repair, since it puts a synonym for a settled term into the ubiquitous language.
+
 **One layering deviation from ADR-0001 is worth naming.** `capture/` sits beside `inference/` rather than inside `application/`, despite being orchestration by any strict reading. It earns the separation because ingestion is the stage most likely to become a separate process later (new ingress paths are the first post-MVP item, PRD §7.2), and because it is the one stage with a hard rule of its own: it performs no semantic reasoning. Keeping it a peer keeps that rule visible.
 
 ## 4. Runtime and process model
@@ -324,7 +326,14 @@ The test ADR-0008 gives holds throughout: if a port signature mentions `temperat
 
 **Three providers means three copies of the extraction prompt drifting apart** — the acknowledged cost of task-shaped ports. The mitigation is a shared prompt template in `infrastructure/llm/shared/`, with per-adapter differences confined to how structured output is requested: tool use, JSON mode, or grammar constraints, which genuinely do differ between Anthropic, OpenAI, and a local runtime.
 
-**In-memory adapters for every port ship alongside the real ones**, and this is the payoff ADR-0001 is actually buying. The entire pipeline — ingestion through triage — runs against them with no network and no database, which is what lets the eval set run in CI on every commit.
+**Every port has an adapter that runs with no network**, and this is the payoff ADR-0001 is actually buying. The entire pipeline — ingestion through triage — runs that way with no network and no database, which is what lets the eval set run in CI on every commit.
+
+**That does not always mean a second adapter.** The test is whether the real adapter can already do it:
+
+- **Ports that reach a model** — `Extractor`, `Adjudicator`, `Transcriber`, `Embedder` — need a stub returning canned output. There is no offline mode for an LLM, the output is not assertable anyway (`qa.md` §2), and without the stub nothing downstream of extraction is testable at all. Here the in-memory adapter is load-bearing.
+- **Storage ports** — `EventStore`, `CaptureStore`, the `*Repository` reads — need nothing extra. SQLite runs in `:memory:`, which is the real adapter with no disk rather than a second implementation of it.
+
+Writing a fake for the second group is not free, and the cost is not the code. Two implementations of one port can disagree, and a disagreement about something the fake was built to guarantee is invisible until it matters: Slice 0 built an in-memory `EventStore` whose stored events could be edited in place, which the SQLite adapter refused, and no test noticed because each adapter was only ever compared against itself. Prefer `:memory:` wherever the real adapter offers it.
 
 ## 10. Data model
 

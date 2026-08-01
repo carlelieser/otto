@@ -1,0 +1,37 @@
+name: verify
+
+# `qa.md` §12 puts the lint rules second in the execution order, "from the first
+# commit, per ADR-0001 and ADR-0003", and §4.1 requires that they fail the build
+# rather than warn. They are tests, so they run with the suite.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Run the boundary rules first and separately. They are the cheapest tests
+      # in the plan and they guard the most important boundary, so a violation
+      # should be legible at a glance rather than buried in the full run.
+      - name: Layering rules (qa.md §4.1)
+        run: npm run lint:boundaries
+
+      - name: Formatting
+        run: npm run format:check
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Test suite
+        run: npm test

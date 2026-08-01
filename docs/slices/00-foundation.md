@@ -32,7 +32,7 @@ Three things in this slice are cheap now and expensive later:
 
 **The event log.** `events` table, append-only, each row carrying type, version, aggregate, payload, and provenance: Proposal, Capture, provider, model version, confidence at the time of inference, and the human-confirmed flag (`add.md` §10). Insert-only in the application layer *and* enforced by SQLite triggers rejecting UPDATE and DELETE — `qa.md` §4.1 asks for both, because a test that the application declines to do something is weaker than a database that will not permit it.
 
-**The `EventStore` port and its two adapters** — SQLite and in-memory. Both ship together from here on; `add.md` §9 calls the in-memory pair the payoff the layering is actually buying, and it is what lets every later slice's tests run with no database.
+**The `EventStore` port and its SQLite adapter**, in WAL mode. One adapter, not two: `add.md` §9 asks for an adapter that runs with no network, and SQLite's `:memory:` mode already is one — the real adapter with no disk rather than a second implementation of it. A separate in-memory `EventStore` was built here and removed; the two disagreed about whether a stored event could be edited in place, which is a Tier 0 property, and nothing caught it because each was only compared against itself. The in-memory pair stays load-bearing for the ports that reach a model, which arrive in Slice 2.
 
 **The executor**, in its minimal form: takes a Command, validates it against the current aggregate, appends an event, returns. Optimistic concurrency on the aggregate version is built now (`add.md` §5.6) — the staleness *behaviour* is Slice 4's, but the version stamp has to be on the event from the first one.
 
@@ -57,7 +57,7 @@ Three things in this slice are cheap now and expensive later:
 1. Repository skeleton, TypeScript configuration, test runner, property-testing library.
 2. The four lint rules, wired to fail the build, with a deliberately-violating fixture proving each one fails.
 3. `domain/events/` — event shape with type, version, aggregate, payload, provenance. Pure, no I/O.
-4. The `EventStore` port; the in-memory adapter first, then SQLite with WAL and the UPDATE/DELETE triggers.
+4. The `EventStore` port, then its SQLite adapter with WAL and the UPDATE/DELETE triggers.
 5. The executor: validate, append, return. Aggregate version stamped.
 6. Upcast registry and the identity upcast.
 7. Snapshot write/resume machinery, cadence constant set to never.
@@ -76,8 +76,8 @@ Tier 0 (`qa.md` §4), at that tier's adversarial standard — this slice is almo
 
 ## Done when
 
-- A `CaptureIngested` event is appended through the executor and read back from both adapters, with identical results.
+- A `CaptureIngested` event is appended through the executor and read back, carrying its full provenance and its aggregate version stamp.
 - All four lint rules fail the build on their violating fixtures and pass on the real tree.
 - SQLite rejects UPDATE and DELETE on `events` at the database level.
-- The suite runs with no network and no SQLite against the in-memory adapters.
+- The suite runs with no network, against SQLite in `:memory:`, touching no disk.
 - `stack.md` §8's test-framework row is no longer open.
