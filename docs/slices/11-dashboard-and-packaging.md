@@ -1,6 +1,6 @@
-# Slice 10 — Dashboard and packaging
+# Slice 11 — Dashboard and packaging
 
-> Depends on: Slices 5 and 6; surfaces everything built before it.
+> Depends on: Slices 6 and 7; surfaces everything built before it.
 > Sources: [`prd.md`](../prd.md) §5.2, §5.3, §7.1; [`add.md`](../add.md) §6, §7; [`stack.md`](../stack.md) §6, §8; [`qa.md`](../qa.md) §10, §13.
 
 ## What it closes
@@ -21,7 +21,7 @@ Last, because it is the one slice that has to see all the others. Every surface 
 
 **Entity detail views** (PRD §5.3) — where the knowledge base pays off. A Person shows what Otto knows about them, the projects they're involved in, the events they were at, open follow-ups, and when the user last had contact. A Project shows its status, its next action, who's involved, and its history. This is the difference between a pile of notes and a knowledge base: the user asks about one thing and gets everything connected to it, assembled from notes written weeks apart that never mentioned each other.
 
-**Provenance visible on every fact** (PRD §7.1, `add.md` §7). Every field can name the note it came from, and through it the Proposal, model and version, confidence, and whether a human confirmed it. The projection built this pointer in Slice 5; this slice renders it.
+**Provenance visible on every fact** (PRD §7.1, `add.md` §7). Every field can name the note it came from, and through it the Proposal, model and version, confidence, and whether a human confirmed it. The projection built this pointer in Slice 6; this slice renders it.
 
 **Date precision rendered honestly** (`schema.md` §8). A `quarter`-precision date displays as "Q3" and never as a specific day. `relative_unresolved` keeps its phrase and is excluded from anything time-ordered.
 
@@ -31,14 +31,14 @@ Last, because it is the one slice that has to see all the others. Every surface 
 
 **Packaging per platform** (`stack.md` §6, §8). The installer carries `whisper.cpp`, the embedding model, and the SQLite-Vector native extension per target — roughly 650 MB before Otto's own code, accepted because working offline on first launch is worth more than a small download. The Node sidecar ships alongside the Tauri binary.
 
-**Closing `stack.md` §8's remaining open rows**: the build and packaging pipeline, the Svelte version and UI dependencies, and how the sidecar's Node runtime *ships* — Slice 1 settled the development answer (the host spawns an installed Node, behind a configurable interpreter path) and left the bundled runtime here, which this slice substitutes without rewriting the supervisor. (The test framework closed in Slice 0; the SQLite driver in Slice 0–1; the Rust toolchain and Tauri version in Slice 1; SQLite-Vector's licence in Slice 3.)
+**Closing `stack.md` §8's remaining open rows**: the build and packaging pipeline, the Svelte version and UI dependencies, and how the sidecar's Node runtime *ships* — Slice 2 settled the development answer (the host spawns an installed Node, behind a configurable interpreter path) and left the bundled runtime here, which this slice substitutes without rewriting the supervisor. (The test framework closed in Slice 0; the SQLite driver in Slice 0–1; the Rust toolchain and Tauri version in Slice 2; SQLite-Vector's licence in Slice 4.)
 
 **Cross-platform smoke**: the application launches, the tray works, and the hotkey binds on macOS, Windows, and Linux.
 
 ## Not in scope
 
 - **Mobile or web clients.** Post-MVP (PRD §7.2).
-- **Semantic search over notes.** Post-MVP. Full-text search from Slice 5 is what ships.
+- **Semantic search over notes.** Post-MVP. Full-text search from Slice 6 is what ships.
 - **Rich text, wiki links, page hierarchy.** Excluded by PRD §6 — notes are captures, not documents.
 - **User-defined tags, folders, or any taxonomy.** Excluded by PRD §6. If the user has to file something, Otto has failed.
 - **Auto-update infrastructure.** Not specified anywhere in the MVP scope.
@@ -65,7 +65,7 @@ Tier 4 (`qa.md` §10) — smoke plus targeted cases around staleness:
 **E2E, and only these two** — every E2E test must justify why it cannot be an integration test:
 
 - Tray hotkey to durable Capture (the three-process integration).
-- Review-queue adjudication to applied event (the full write path through the UI) — inherited from Slice 6.
+- Review-queue adjudication to applied event (the full write path through the UI) — inherited from Slice 7.
 
 **Accessibility and cross-platform are smoke-level.** Otto is single-user desktop software; browser matrices do not apply.
 

@@ -1,6 +1,6 @@
-# Slice 4 — Triage
+# Slice 5 — Triage
 
-> Depends on: Slice 3. Blocks: Slice 5.
+> Depends on: Slice 4. Blocks: Slice 6.
 > Sources: [`triage.md`](../triage.md) (all); [`add.md`](../add.md) §5.5, §5.6; [`qa.md`](../qa.md) §5; ADR-0006, ADR-0007, ADR-0012.
 
 ## What it closes
@@ -45,10 +45,10 @@ The multiplication assumes an independence that does not hold and therefore unde
 
 ## Not in scope
 
-- **The review queue as a surface.** Slice 6. Proposals are given a disposition here and stored; the user cannot see or act on them yet.
-- **Corrections.** Slice 6. Bootstrap counts corrections, and until Slice 6 exists that count is zero — which means this slice ships in permanent bootstrap, and that is the correct behaviour rather than a gap.
+- **The review queue as a surface.** Slice 7. Proposals are given a disposition here and stored; the user cannot see or act on them yet.
+- **Corrections.** Slice 7. Bootstrap counts corrections, and until Slice 7 exists that count is zero — which means this slice ships in permanent bootstrap, and that is the correct behaviour rather than a gap.
 - **Threshold calibration tooling.** Post-MVP (PRD §7.2). Sampling gathers the data here; the tuning tool that consumes it does not ship in MVP.
-- **Merge and split dispositions.** The policy rows exist and are tested at confidence 1.0 here; the merge *mechanism* is Slice 7 and split never ships in MVP.
+- **Merge and split dispositions.** The policy rows exist and are tested at confidence 1.0 here; the merge *mechanism* is Slice 8 and split never ships in MVP.
 
 ## Build order
 

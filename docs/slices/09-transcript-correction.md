@@ -1,6 +1,6 @@
-# Slice 8 — Transcript correction
+# Slice 9 — Transcript correction
 
-> Depends on: Slice 6. Independent of Slices 7 and 9.
+> Depends on: Slice 7. Independent of Slices 8 and 10.
 > Sources: [`prd.md`](../prd.md) §5.5, §6; [`add.md`](../add.md) §5.1; [`runtime.md`](../runtime.md) §3, §5; [`qa.md`](../qa.md) §7.6; ADR-0014.
 
 ## What it closes
@@ -11,9 +11,9 @@ Small slice, specific job: voice capture mishears names, and a mishearing become
 
 ## Why here
 
-It needs the review queue's correction affordance (Slice 6) and it needs something derived to update, which means the projections (Slice 5). It is independent of merge and briefs and can be built in any order among them.
+It needs the review queue's correction affordance (Slice 7) and it needs something derived to update, which means the projections (Slice 6). It is independent of merge and briefs and can be built in any order among them.
 
-It is also the smallest slice that touches the immutability rule, which is why it is worth isolating rather than folding into Slice 6: **it must not weaken that rule**, and the way it avoids doing so is precise enough to deserve its own verification.
+It is also the smallest slice that touches the immutability rule, which is why it is worth isolating rather than folding into Slice 7: **it must not weaken that rule**, and the way it avoids doing so is precise enough to deserve its own verification.
 
 ## In scope
 
@@ -39,7 +39,7 @@ It is also the smallest slice that touches the immutability rule, which is why i
 
 ## Build order
 
-1. The `CaptureTranscriptCorrected` event. The `corrected_text` column already exists from Slice 1, holding `NULL` — this slice is the first thing to write it, which is what makes the change an append rather than a migration against a table whose triggers refuse UPDATE.
+1. The `CaptureTranscriptCorrected` event. The `corrected_text` column already exists from Slice 2, holding `NULL` — this slice is the first thing to write it, which is what makes the change an append rather than a migration against a table whose triggers refuse UPDATE.
 2. The correction affordance on a voice Capture, one step.
 3. Extraction reading corrected text in preference to raw.
 4. Automatic re-run of the pipeline for the corrected Capture.
@@ -56,7 +56,7 @@ Tier 2 (`qa.md` §7.6):
 - **Typed Captures are not editable.** Test the *absence* of the affordance.
 - A re-extracted Proposal matching current state closes silently rather than appearing in the queue (`qa.md` §4.3).
 - Re-extraction under the same model produces identical proposal ids; under a different model version, new ids arriving as ordinary Proposals subject to ordinary triage (`qa.md` §4.3). **A test asserting only the first would pass on an implementation that hashed away the model version**, which is the bug `runtime.md` §3 is written to prevent.
-- `captures` still rejects UPDATE and DELETE at the SQLite level — the Slice 1 Tier 0 test, re-verified now that a correction path exists.
+- `captures` still rejects UPDATE and DELETE at the SQLite level — the Slice 2 Tier 0 test, re-verified now that a correction path exists.
 
 ## Done when
 

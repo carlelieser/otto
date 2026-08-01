@@ -1,13 +1,13 @@
-# Slice 3 — Resolution and the differ
+# Slice 4 — Resolution and the differ
 
-> Depends on: Slice 2. Blocks: Slice 4.
+> Depends on: Slice 3. Blocks: Slice 5.
 > Sources: [`add.md`](../add.md) §5.3, §5.4; [`schema.md`](../schema.md); [`triage.md`](../triage.md) §1; [`runtime.md`](../runtime.md) §2, §4.3; [`qa.md`](../qa.md) §7.2, §7.3; ADR-0007, ADR-0009, ADR-0010, ADR-0014.
 
 ## What it closes
 
 A Mention becomes a decision about which entity it refers to — or that it refers to none — and the difference between what the note says and what Otto currently believes becomes a set of Commands. The knowledge model exists from this slice on: Person, Project, Idea, Event, Task, and the closed relation vocabulary.
 
-Commands are produced but not applied. Slice 4 decides what happens to them.
+Commands are produced but not applied. Slice 5 decides what happens to them.
 
 ## Why here
 
@@ -31,7 +31,7 @@ This is also the slice where `schema.md` stops being a document and becomes data
 
 **The `Adjudicator` port**, invoked only when scoring leaves the case genuinely ambiguous. A note and the top three or four candidates in, one choice or none out. It cannot invent an entity id, because the only ids it has seen are the ones it was given. **When adjudication runs, the confidence is still the scorer's margin between the top two candidates** (`triage.md` §1) — an adjudicated pick among near-identical candidates is not made confident by having been adjudicated.
 
-**The resolution bias.** Deliberately toward "none of these" over a wrong match (ADR-0009): a duplicate Person is recoverable by merge, a fact attached to the wrong person quietly corrupts what the user knows. Slice 4 pays the cost of this bias and Slice 7 cleans up what gets through.
+**The resolution bias.** Deliberately toward "none of these" over a wrong match (ADR-0009): a duplicate Person is recoverable by merge, a fact attached to the wrong person quietly corrupts what the user knows. Slice 5 pays the cost of this bias and Slice 8 cleans up what gets through.
 
 **The differ.** No LLM, fully deterministic. Compares resolved-and-extracted values against current entity state and produces Commands. Cardinality comes from the schema: `single` supersedes, `set` unions and never silently drops a member. Dependent fields are handled — `blocker` is cleared by a status change away from `blocked` (`schema.md` §4).
 
@@ -39,11 +39,11 @@ This is also the slice where `schema.md` stops being a document and becomes data
 
 ## Not in scope
 
-- **Triage, thresholds, and the application policy.** Slice 4. Commands are produced here; what may happen to them without a human looking is a different question with a different home.
-- **Duplicate detection over the entity table.** Slice 7. Candidate generation is built here and Slice 7 points the same machinery at entities instead of at Mentions — which is why it is cheap there.
-- **The entity projection as a read surface.** Slice 5. Resolution reads entity state here through a repository port; the dashboard's view of it comes later.
-- **Merge and redirects.** Slice 7. The differ produces no merge Command yet.
-- **Salience.** Slice 9. It is a derived field the differ must refuse to accept from extraction, which is tested here.
+- **Triage, thresholds, and the application policy.** Slice 5. Commands are produced here; what may happen to them without a human looking is a different question with a different home.
+- **Duplicate detection over the entity table.** Slice 8. Candidate generation is built here and Slice 8 points the same machinery at entities instead of at Mentions — which is why it is cheap there.
+- **The entity projection as a read surface.** Slice 6. Resolution reads entity state here through a repository port; the dashboard's view of it comes later.
+- **Merge and redirects.** Slice 8. The differ produces no merge Command yet.
+- **Salience.** Slice 10. It is a derived field the differ must refuse to accept from extraction, which is tested here.
 
 ## Build order
 
