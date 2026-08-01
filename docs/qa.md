@@ -339,7 +339,7 @@ ADR-0006, PRD §5.5.
 
 ## 8. Performance and the storage assumption
 
-`runtime.md` §4's spike measurements become a standing suite, run against the synthetic corpus (10,000 Captures, ~50,000 events, ~3,000 entities, ~10,000 relations — biased heavy so a pass means comfortable). The spike's own results are the first baseline; the harness that produces them lives in `spikes/sqlite/` and is the suite.
+`runtime.md` §4's spike measurements become a standing suite, run against the synthetic corpus (10,000 Captures, ~50,000 events, ~3,000 entities, ~10,000 relations — biased heavy so a pass means comfortable). The spike's own results, recorded in `runtime.md` §4, are the first baseline. **The suite itself is to be built against the real projector** — the spike's harness was throwaway and is not in the repository, and its projection logic was a stand-in for the real one anyway (§4's own caveat).
 
 | Measurement | Baseline | Pass | Fail |
 |---|---|---|---|
@@ -405,7 +405,7 @@ The architectural commitment is tested separately and matters more than either: 
 
 The order matters because some of these are prerequisites for the others being meaningful.
 
-1. ~~**The SQLite spike** (`runtime.md` §4). Before schema work. It may change the design.~~ **Done — passed on all seven bars; the design is unchanged and schema work is unblocked.** Its harness (`spikes/sqlite/`) becomes the §8 suite.
+1. ~~**The SQLite spike** (`runtime.md` §4). Before schema work. It may change the design.~~ **Done — passed on all seven bars; the design is unchanged and schema work is unblocked.** Its results are the first baseline for the §8 suite.
 2. **Lint rules** (§4.1). From the first commit, per ADR-0001 and ADR-0003. Cheapest tests in the plan and they guard the most important boundary.
 3. **Tier 1 pure tests** (§5). Pure functions, no fixtures, writable before any infrastructure exists. Highest value per unit of effort in the entire plan.
 4. **In-memory adapters and pipeline integration** (§4.3, §7.2). ADR-0001 says this is what the layering is buying; it should be built early enough to actually collect on that.

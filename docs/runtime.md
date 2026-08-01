@@ -111,7 +111,7 @@ A retry with the same model produces the same ids and is idempotent. A re-run un
 
 ADD §12 flagged SQLite as assumed and unvalidated and said the spike belonged before schema work. It has now been run. **All seven bars pass, the closest by a factor of 20.** The storage assumption holds and schema work is unblocked.
 
-Implementation and full results: [`spikes/sqlite/`](../spikes/sqlite/), [`FINDINGS.md`](../spikes/sqlite/FINDINGS.md).
+The harness was throwaway code and is not in the repository. The numbers below are the result it produced, and are the record of it.
 
 **Synthetic corpus**: 5 years of plausible single-user volume — 10,000 Captures, 41,240 events, 3,000 entities, 9,970 relations. Generated, not real, and biased toward the heavy end so a pass means comfortable rather than marginal.
 
@@ -129,7 +129,34 @@ Latencies are p95 over 200–500 iterations rather than means, since the bars re
 
 Between pass and fail is the band where the design holds but needs attention — a snapshot cadence tightened, an index added. Nothing is in it, and the bars remain the standing performance suite (`qa.md` §8) precisely so that a later change that puts something there is caught.
 
-**Vector search was expected to be the likeliest failure and was not.** `sqlite-vec` returns top-20 over 3,000 × 384d vectors in 0.3 ms against a 100 ms bar, and stays under it to 75,000 entities. The fallback — a separate on-disk index rebuilt from the log like any other projection (ADR-0005) — is not needed and should not be built. Two caveats carried forward: `sqlite-vec` is pre-1.0, and it is brute-force rather than ANN, so its cost grows linearly with entity count rather than logarithmically. At Otto's scale that is comfortable, and the linearity is what makes the numbers trustworthy.
+**Where it breaks.** The bars are defined at ×1; the corpus generator scaled, so the useful question is where the design stops holding rather than by how much it passes.
+
+| Scale | Events | Entities | Rebuild | Vector | FTS | Size |
+|---|---|---|---|---|---|---|
+| ×1 | 41,240 | 3,000 | 0.21 s | 0.3 ms | 1.7 ms | 48 MB |
+| ×5 | 206,443 | 15,000 | 1.52 s | 1.5 ms | 5.8 ms | 237 MB |
+| ×10 | 413,141 | 30,000 | 3.90 s | 8.5 ms | 10.7 ms | 474 MB |
+| ×25 | 1,032,365 | 75,000 | 15.06 s | 21.2 ms | 27.3 ms | 1.18 GB |
+
+Every bar still passes at ×25 — one million events, roughly 125 years of use at the assumed rate. Rebuild is linear at ~68,000 events/sec and would reach the 60 s bar near 4M events. Disk is the first bar that would realistically bind, at roughly 2 GB and 45× the specified corpus.
+
+**Vector search was expected to be the likeliest failure and was not.** The spike returned top-20 over 3,000 × 384d vectors in 0.3 ms against a 100 ms bar, and stayed under it to 75,000 entities. The fallback — a separate on-disk index rebuilt from the log like any other projection (ADR-0005) — is not needed and should not be built. The margin is wide enough that the conclusion is about SQLite rather than about any one extension: exact search over this corpus is far below the bar, so the design does not depend on approximate indexing.
+
+The measurement was taken on `sqlite-vec` 0.1.9, which is **not** the extension Otto ships. See §4.3.
+
+### 4.3 The vector extension: SQLite-Vector 1.0
+
+**Otto uses [`sqliteai/sqlite-vector`](https://github.com/sqliteai/sqlite-vector) at 1.0.0.** The spike was written against `asg017/sqlite-vec` 0.1.9 — a different project — and that dependency does not carry forward. `sqlite-vec` is pre-1.0 and alpha-tagged on npm; depending on it for the storage layer of a local-first application was a standing risk the spike recorded rather than resolved.
+
+Three differences change the integration rather than the architecture:
+
+**It is a loadable binary extension, not an npm package.** Prebuilt artefacts are published per platform and per architecture — macOS, Linux (glibc and musl), Windows, iOS, and Android — so the sidecar loads a `.dylib`/`.so`/`.dll` rather than importing a module. This becomes a packaging concern: the extension joins `whisper.cpp` and the embedding model as a native artefact the installer must ship per target.
+
+**Vectors are ordinary `BLOB` columns in ordinary tables**, with no virtual table required. The spike's schema used a `sqlite-vec` virtual table, so the entity-embedding table is the one piece of the spike's schema that does not transfer as written.
+
+**Quantization is available and unused for now.** The extension supports Float32 through 1-bit, plus TurboQuant 2/3/4-bit scans. Otto stores Float32: 3,000 × 384d is small enough that the memory saving buys nothing, and quantization trades recall for a resource Otto is not short of. It is worth revisiting only if entity count grows by an order of magnitude.
+
+**What has not been re-measured.** The 0.3 ms result above belongs to the old extension. The bar is unchanged and remains part of the standing performance suite (`qa.md` §8), so the number will be re-taken when the real projector exists; the spike cleared it by 330×, and the replacement is a production-grade 1.0 doing exact search over the same corpus, so the risk of a regression across that margin is low. **The licence is also unconfirmed** — GitHub reports no recognised SPDX identifier — and wants checking before the extension is bundled into a distributed installer.
 
 **No bar failed, so snapshotting is not load-bearing.** It was measured anyway, because a full-rebuild failure would only have been fatal if snapshot-resumed rebuilds also failed: replaying the tail 10% of the log takes 24 ms against a 215 ms full rebuild. The mechanism works and ADR-0011 has its shape right; it is simply not needed yet. This settles the cadence question ADR-0011 left open — see §4.1.
 

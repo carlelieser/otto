@@ -14,8 +14,8 @@ All decisions needed to begin implementation are settled. Nothing in this set co
 | [`runtime.md`](./runtime.md) | Process model, local models with budgets, the SQLite spike and its results, transcript correction. |
 | [`salience.md`](./salience.md) | What gets surfaced and what goes in a brief. v0, expected to be replaced. |
 | [`qa.md`](./qa.md) | What to test, at what rigour, and in what order. |
+| [`stack.md`](./stack.md) | Every technology choice in one place. Derivative — a summary of the above, not a source. |
 | [`adr/`](./adr/) | Why each decision went the way it did, including the one that was reversed. |
-| [`../spikes/sqlite/`](../spikes/sqlite/) | The storage spike: harness, results, and the standing performance suite. |
 
 ## Decision record
 
@@ -41,7 +41,7 @@ All decisions needed to begin implementation are settled. Nothing in this set co
 
 Two things ran first, in this order, because both can change the design:
 
-1. ~~**The SQLite spike**~~ ([`runtime.md`](./runtime.md) §4) — **done, passed on all seven bars.** The storage design is unchanged and schema work is unblocked. Harness and results in [`spikes/sqlite/`](../spikes/sqlite/).
+1. ~~**The SQLite spike**~~ ([`runtime.md`](./runtime.md) §4) — **done, passed on all seven bars.** The storage design is unchanged and schema work is unblocked. Results in [`runtime.md`](./runtime.md) §4; the harness was throwaway and is not kept.
 2. **Local extraction measurement** ([`runtime.md`](./runtime.md) §2) — whether a 7–8B model under grammar constraints clears the stated floor. Still to run, and now the assumption in Otto most likely to be wrong.
 
 After those, [`qa.md`](./qa.md) §12 has the build order.
