@@ -254,6 +254,8 @@ The floor to clear, stated as a pass condition: **the local path produces a usab
 
 If the local model cannot clear this, `runtime.md` §2 states the honest response is to raise the minimum local model size rather than loosen thresholds. The eval set is what makes that call with data.
 
+**The unconfigured state is the primary configuration, not an edge case** (ADR-0016). Local is the default, so the suite's baseline run has no provider credentials present at all, and a test that only passes with a cloud key configured is testing something no default user experiences. Two things follow: the full pipeline must run green with no provider configured, and removing a previously-configured provider must leave Otto functional rather than stalled — the same "captures accumulate" state as §11's unavailable provider would be a failure here, because nothing is unavailable.
+
 ### 6.4 Transcription
 
 - Name accuracy specifically, not general WER (`runtime.md` §2).
@@ -422,7 +424,8 @@ A build ships when:
 - Every lint rule in §4.1 passes. Not negotiable — these encode ADR-0003.
 - Tier 0 and Tier 1 are green with no skipped tests. A skipped destructive-change test is a release blocker.
 - Eval set metrics have not regressed against the previous release, per provider and model version. A regression is a hold, not a warning — ADR-0006 notes that without this the pipeline rots silently.
-- The local path clears the §6.3 floor.
+- The local path clears the §6.3 floor. Since ADR-0016 makes it the default, this gates the shipped experience rather than an alternative one.
+- The suite is green with no provider configured (§6.3). A release that only passes with cloud credentials present has not been tested in its default configuration.
 - No performance measurement is in the fail column; measurements in the warning band are recorded.
 - The two E2E paths pass.
 

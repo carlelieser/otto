@@ -66,25 +66,27 @@ Name accuracy is the metric that matters, not general WER: "Sarah" transcribed a
 
 ### Extraction and adjudication
 
-**Cloud by default, local supported, with a stated quality floor.**
+**Local by default, cloud opt-in and configurable per port, with a stated quality floor** (ADR-0016).
 
 | Path | Model | Notes |
 |---|---|---|
-| Default | Claude (Sonnet tier) | Best structured-output reliability; the quality bar the eval set is measured against |
-| Alternative | OpenAI | Second adapter, same ports |
-| Local | Qwen-class 7–8B instruct via LMStudio or Ollama, GBNF-constrained | The floor, not the target |
+| Default | Qwen-class 7–8B instruct via LMStudio or Ollama, GBNF-constrained | What Otto runs with nothing configured; the path the eval set must clear |
+| Opt-in | Claude (Sonnet tier) | Best structured-output reliability; the quality ceiling to measure against |
+| Opt-in | OpenAI | Second adapter, same ports |
 
-**The risk here is real and named**: schema-constrained extraction from a 7–8B model is the single most likely technical assumption in Otto to be wrong. Grammar-constrained decoding guarantees *parseable* output, not *correct* output — a local model reliably produces valid JSON and less reliably produces the right values in it.
+Otto is fully functional before any provider is configured and after one is removed. Cloud is an upgrade the user chooses for extraction quality, not a fallback entered on failure — which is why the table above is not ordered by preference.
+
+**The risk here is real and named**: schema-constrained extraction from a 7–8B model is the single most likely technical assumption in Otto to be wrong. Grammar-constrained decoding guarantees *parseable* output, not *correct* output — a local model reliably produces valid JSON and less reliably produces the right values in it. Making it the default puts that risk in front of every user rather than leaving it untested behind a cloud default, which is uncomfortable and correct (ADR-0016).
 
 Three things keep that from being a surprise:
 
-**The eval set is the gate** (ADR-0006). Local extraction is measured against the same fixed corpus as cloud extraction, and its numbers are expected to be worse. The question is how much worse, answered with data rather than assumed.
+**The eval set is the gate** (ADR-0006). Local extraction is measured against the same fixed corpus as cloud extraction, and its numbers are expected to be worse. The question is how much worse, answered with data rather than assumed — and because local is the default, that number describes what a user actually gets rather than a fallback.
 
 **Thresholds are per model** (ADR-0008), so a weaker local model produces lower Confidence, which produces more review rather than more errors. The system degrades into asking more questions — which is the correct degradation, and is why `triage.md` §4's bootstrap applies per model version.
 
 **Extraction is decomposed for local runs when necessary.** If whole-note extraction proves unreliable at 8B, the fallback is several narrower prompts — mentions first, then fields per mention — trading latency for reliability. Latency is affordable here because the pipeline is asynchronous (ADD §4) and nobody is waiting.
 
-The floor Otto must clear to claim local support: **the local path produces a usable knowledge base with more review friction, not a corrupted one.** If the eval-set measurement shows an 8B model cannot clear that, the honest response is to raise the minimum local model size, not to quietly loosen thresholds. That measurement is the gate that remains — §4's storage spike has been run and passed, which leaves this the assumption in Otto most likely to be wrong.
+The floor Otto must clear, now that local is the default path rather than a supported alternative: **the local path produces a usable knowledge base with more review friction, not a corrupted one.** If the eval-set measurement shows an 8B model cannot clear that, the honest response is to raise the minimum local model size — not to quietly loosen thresholds, and not to restore a cloud default to hide it (ADR-0016). That measurement is the gate that remains — §4's storage spike has been run and passed, which leaves this the assumption in Otto most likely to be wrong.
 
 ### Embeddings
 
