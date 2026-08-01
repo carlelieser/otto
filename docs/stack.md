@@ -12,7 +12,7 @@ Two properties explain most of the choices below, and are worth holding while re
 
 **Local must actually work, not nominally work.** ADR-0008 and PRD §4.6 make fully local operation a requirement. That is why transcription and embeddings have no cloud option at all, and why the local extraction path is named and budgeted rather than described as a fallback.
 
-**Almost everything is derived.** The event log and Captures are the only truth (ADR-0005); entity tables, indexes, embeddings, and salience are projections. A technology that holds only derived state is cheap to replace, which is why `sqlite-vec` being pre-1.0 is an acceptable risk and a mis-specified salience rule is not a migration.
+**Almost everything is derived.** The event log and Captures are the only truth (ADR-0005); entity tables, indexes, embeddings, and salience are projections. A technology that holds only derived state is cheap to replace — swapping the vector index is a rebuild rather than a migration, which is exactly what made changing it after the spike a low-cost decision.
 
 ## 2. The stack at a glance
 
@@ -24,7 +24,7 @@ Two properties explain most of the choices below, and are worth holding while re
 | Host ↔ sidecar transport | JSON-RPC over stdio | ADR-0013, `runtime.md` §1 |
 | Database | SQLite, WAL mode | ADR-0005, ADR-0013 |
 | Query layer | Drizzle | ADD §3 |
-| Vector index | `sqlite-vec` | `runtime.md` §4 |
+| Vector index | SQLite-Vector 1.0 (`sqliteai/sqlite-vector`), loadable extension | `runtime.md` §4.3 |
 | Full-text search | SQLite FTS | `runtime.md` §4 |
 | Transcription | `whisper.cpp`, `small.en`, bundled | ADR-0013, `runtime.md` §2 |
 | Extraction / adjudication — default | Claude (Sonnet tier) | ADR-0013, `runtime.md` §2 |
@@ -68,16 +68,11 @@ flowchart LR
 
 ## 4. Storage
 
-**SQLite, one file, WAL mode.** Assumed by ADR-0005 and validated by the spike in `runtime.md` §4 — all seven bars passed over a synthetic 5-year corpus, the closest by a factor of 20. Implementation and full results in [`spikes/sqlite/`](../spikes/sqlite/).
+**SQLite, one file, WAL mode.** Assumed by ADR-0005 and validated by the spike in `runtime.md` §4 — all seven bars passed over a synthetic 5-year corpus, the closest by a factor of 20.
 
-The spike's two dependencies are the storage stack in miniature:
+**The vector index is SQLite-Vector 1.0** — [`sqliteai/sqlite-vector`](https://github.com/sqliteai/sqlite-vector), `runtime.md` §4.3. It is a loadable binary extension rather than an npm package, with prebuilt artefacts per platform, and it stores vectors as ordinary `BLOB` columns rather than in a virtual table. Otto stores Float32 and does not use the available quantization; §4.3 has the reasoning and the two things still to confirm — a re-measurement against the standing bar, and the licence.
 
-| Package | Version pinned in the spike | Role |
-|---|---|---|
-| `better-sqlite3` | `^11.10.0` | Synchronous SQLite driver |
-| `sqlite-vec` | `^0.1.7-alpha.2` | Vector search extension |
-
-**Two caveats carried forward on `sqlite-vec`** (`runtime.md` §4). It is pre-1.0, and it is brute-force rather than ANN, so its cost grows linearly with entity count rather than logarithmically. It cleared its bar by 330× and stays under it to 75,000 entities, so at Otto's scale that is comfortable — and the linearity is what makes the numbers trustworthy. The fallback of a separate on-disk index is **not needed and should not be built**.
+The spike validated SQLite itself, not a dependency list — it was throwaway code, and the packages it happened to use are not decisions. The application's SQLite driver is unspecified; §8 records it as open.
 
 **Snapshotting is built but switched off** (`runtime.md` §4.1). Full rebuild is 215 ms at the specified corpus; the cadence is set to never and revisited if the log passes ~1M events. The mechanism is the expensive part to add later; the cadence is a constant.
 
@@ -114,7 +109,7 @@ Stated because a stack page that lists only benefits is a sales document.
 - **Roughly 650 MB in the installer** before Otto's own code, from bundling `whisper.cpp` and an embedding model (ADR-0013). Accepted: working offline on first launch is worth more than a small download.
 - **Three providers means three copies of the extraction prompt** drifting apart — the acknowledged cost of task-shaped ports (ADR-0008), mitigated by the shared template above.
 - **A third process to supervise.** Rewriting the pipeline in Rust remains the option to revisit if the sidecar proves operationally annoying (ADR-0013).
-- **`sqlite-vec` is pre-1.0.** Contained because embeddings are derived state and a replacement is a rebuild, not a migration (ADR-0005).
+- **The vector extension is a native binary per platform.** SQLite-Vector ships prebuilt artefacts rather than an npm package, so it joins `whisper.cpp` and the embedding model as something the installer must carry per target (`runtime.md` §4.3).
 
 ## 7. The assumption most likely to be wrong
 
@@ -129,6 +124,8 @@ The floor Otto must clear to claim local support is that **the local path produc
 Genuinely open, rather than decided elsewhere and omitted here.
 
 - **Test framework and runner.** `qa.md` specifies tiers, rigour, and release criteria, and names the *kinds* of test required — property-based tests and in-memory integration tests among them — but no runner, assertion library, or property-testing library is chosen.
-- **Build and packaging pipeline.** How the sidecar, `whisper.cpp`, and the embedding model are bundled into a Tauri installer per platform.
+- **The SQLite driver.** The spike used `better-sqlite3`; nothing decides what the sidecar uses, and the driver must be able to load a binary extension (`runtime.md` §4.3).
+- **SQLite-Vector's licence**, which GitHub does not report as a recognised SPDX identifier. Worth confirming before it is bundled into a distributed installer.
+- **Build and packaging pipeline.** How the sidecar, `whisper.cpp`, the embedding model, and the vector extension are bundled into a Tauri installer per platform.
 - **Svelte version and UI dependencies.** ADD §3 names Svelte; nothing specifies a version, router, or component approach.
 - **Node version for the sidecar**, and how it is shipped alongside the Tauri binary.

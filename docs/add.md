@@ -336,7 +336,7 @@ The field-level model is in [`schema.md`](./schema.md); what matters architectur
 
 The distinction is worth policing in the schema itself — derived tables live in their own namespace, so "is this rebuildable?" is answerable by looking at the name rather than by reading the projection code.
 
-**SQLite was assumed, and the spike has now validated it.** ADR-0005 flagged this as unvalidated and it stayed that way until it became a measurement with stated pass and fail bars over a synthetic five-year corpus (`runtime.md` §4, ADR-0013). All seven bars pass, the closest by a factor of 20. Vector search was named the likeliest failure since it is the one thing SQLite does not do natively; `sqlite-vec` cleared its bar by 330×, so the fallback — a separate index rebuilt from the log like any other projection — is not needed and should not be built. It remains cheap to reach for later precisely because embeddings are already derived state.
+**SQLite was assumed, and the spike has now validated it.** ADR-0005 flagged this as unvalidated and it stayed that way until it became a measurement with stated pass and fail bars over a synthetic five-year corpus (`runtime.md` §4, ADR-0013). All seven bars pass, the closest by a factor of 20. Vector search was named the likeliest failure since it is the one thing SQLite does not do natively; the spike cleared its bar by 330×, so the fallback — a separate index rebuilt from the log like any other projection — is not needed and should not be built. The extension Otto ships is SQLite-Vector 1.0, which is not the one the spike measured (`runtime.md` §4.3). It remains cheap to reach for later precisely because embeddings are already derived state.
 
 ## 11. Failure and degradation
 
