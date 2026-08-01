@@ -29,7 +29,7 @@ It is also a decision better made later on its merits. The host reading the data
 
 **The sidecar supervisor**, restarting on exit with backoff. Because the pipeline is resumable per stage, a restart resumes rather than replays; a crash loop degrades to "captures accumulate," which `add.md` §11 already treats as a handled state. There is nothing to accumulate yet, so the degradation path is tested by injection rather than observed.
 
-**Tray, global hotkey, and an empty capture window.** The window opens, accepts text, and closes. It does not store anything — Slice 2 gives it a `CaptureStore` to write to. Shipping the affordance without the persistence is deliberate: it makes the hotkey-to-window latency measurable before there is a pipeline to blame.
+**Tray, global hotkey, and an empty capture window.** The window opens, accepts text, and closes. It does not store anything — Slice 2 gives it a `CaptureStore` to write to. Shipping the affordance without the persistence is deliberate: it makes hotkey-to-window latency measurable before there is a pipeline to blame. That is a different measurement from Slice 2's hotkey-to-durable-Capture, not a half of it — this one has no storage under it, and the two keep separate baselines.
 
 **CI building both toolchains.** A commit that breaks `cargo build` fails, exactly as one that breaks `npm run verify` does. This is the first thing built, not the last, because a Rust CI discovered broken at the end of the slice is a Rust CI that gets disabled.
 
@@ -59,8 +59,10 @@ Four `stack.md` §8 questions, all of them blocking anything else in Rust:
 2. The Tauri host and the Node sidecar, with JSON-RPC over stdio between them. Prove a round trip: the host calls a method, the sidecar answers, the host receives it.
 3. The supervisor: backoff restart, and the crash-loop degradation path.
 4. Tray, global hotkey, and the capture window, opening and closing without storing.
-5. Audio recording to a temporary file, and the path handoff over the transport. The sidecar reads the file and reports its size — enough to prove the handoff without a transcriber.
+5. Audio recording to a temporary file, and the path handoff over the transport. The sidecar reads the file, reports its size, and deletes it — enough to prove the handoff, and the ownership rule, without a transcriber.
 6. The orphaned-temporary-file sweep on supervisor restart.
+
+**The sidecar deletes, the host writes.** `runtime.md` §2 puts deletion on the sidecar after a successful transcription, and there is no transcriber here — but the ownership rule is the part worth having under test early, because it is what makes the temporary file safe to share between two processes at all. So the sidecar deletes after a successful *read* in this slice, and Slice 2 moves the delete point later in the same handler once transcription sits in front of it. The alternative — leaving deletion out until there is something to transcribe — ships a slice where the host writes files nobody removes, and makes the sweep in step 6 untestable, since every file would be an orphan.
 
 ## Verification
 
@@ -72,12 +74,17 @@ Four `stack.md` §8 questions, all of them blocking anything else in Rust:
 - **The hotkey opens the capture window with the tray closed and no dashboard**, which is the affordance PRD §5.1 asks for.
 - **Audio recorded in the host is readable by the sidecar** at the path it was given, and the file is deleted after a successful read.
 - **An orphaned temporary file is swept on restart.** Write one, kill the sidecar before it reads, restart, assert it is gone.
-- **Hotkey-to-window latency is measured** and recorded. Not a Capture round trip — there is nothing to store — but the affordance half of the budget Slice 2 completes.
+- **Hotkey-to-window latency is under 200 ms**, asserted, with the measured median and p95 recorded. Not a Capture round trip — there is nothing to store — but the window has to be on screen before the user can type into it, which makes this the only part of PRD §4's first principle that is measurable this early.
+
+**The 200 ms bar, and why the baseline matters more.** 200 ms is the point where an opening window stops reading as a response to the keypress and starts reading as a wait; PRD §4 asks for capture that "costs nothing", and nothing here is a keystroke and a caret. It is a generous ceiling on purpose — an empty window with no I/O behind it should land far under, and if it does not, something is wrong with the process model rather than with the budget.
+
+Which is why the assertion alone is not the deliverable. `qa.md` §8 makes the point directly: every bar in the performance suite passes by 20× or better, so a bar alone will not catch a regression until it is catastrophic. Record the median and p95 to `tests/baselines/runtime-latency.json` alongside the machine and OS, the same shape Slice 2 uses for `capture-latency.json` — the 200 ms bar catches a collapse, and the baseline catches the drift that gets you there. Like Slice 2's latency test, this one is tagged out of the default `npm test`: a shared runner's timing is noise, and a flaky red build gets deleted rather than fixed.
 
 ## Done when
 
 - `cargo build` and `npm run verify` are both green in CI on one commit.
 - The hotkey opens a capture window with the tray closed.
 - Killing the sidecar restarts it; killing it repeatedly backs off; the host survives both.
-- Audio recorded by the host is read by the sidecar and cleaned up afterwards.
+- Audio recorded by the host is read by the sidecar, which deletes it after a successful read; orphans left by a crash are swept on restart.
+- Hotkey-to-window latency is under 200 ms, with median and p95 committed to `tests/baselines/runtime-latency.json`.
 - The Rust toolchain, Tauri major version, audio crate, and sidecar spawn path are pinned and recorded in `stack.md` §8.
