@@ -35,3 +35,60 @@ jobs:
 
       - name: Test suite
         run: npm test
+
+  # Slice 1 puts the Rust build in CI first rather than last: a Rust CI
+  # discovered broken at the end of the slice is a Rust CI that gets disabled.
+  # A commit that breaks `cargo build` fails exactly as one that breaks
+  # `npm run verify` does.
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The toolchain comes from `rust-toolchain.toml`, so CI and every
+      # developer agree without the version being written down twice.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Tauri's Linux build needs the system WebKit and its tray dependencies.
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev \
+            patchelf
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The supervisor's integration tests drive a real spawned sidecar, so the
+      # sidecar has to exist before they run.
+      - name: Build the sidecar
+        run: npm run build:sidecar
+
+      - name: Formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Lints
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      # The latency test is tagged out of the default run: a shared runner's
+      # timing is noise, and a flaky red build gets deleted rather than fixed
+      # (`qa.md` §8). Everything else runs.
+      - name: Test suite
+        run: cargo test --manifest-path src-tauri/Cargo.toml

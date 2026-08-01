@@ -2,6 +2,7 @@
 
 > Depends on: Slice 0. Blocks: Slice 2.
 > Sources: [`add.md`](../add.md) §3, §4, §11; [`runtime.md`](../runtime.md) §1, §2; [`stack.md`](../stack.md) §8; [`qa.md`](../qa.md) §8; ADR-0013.
+> Decisions taken here are recorded in [ADR-0017](../adr/0017-pinned-runtime-toolchain-and-sidecar-spawn.md).
 
 ## What it closes
 
@@ -45,6 +46,12 @@ Four `stack.md` §8 questions, all of them blocking anything else in Rust:
 
 **How the sidecar is spawned**, which is where the Node-shipping question bites: the host must find a Node runtime to launch. This slice takes the *development* answer only — the host spawns the developer's installed Node, located through a configurable interpreter path. Shipping a runtime inside the installer stays with packaging in Slice 11, and the configurable path is what lets that slice substitute a bundled binary rather than rewriting the supervisor.
 
+Two more that this slice's own build order forces, both smaller but both load-bearing for the slices after it:
+
+**Where the sidecar's TypeScript lives: `src/interfaces/sidecar/`.** The sidecar is a delivery mechanism — it reads stdin, dispatches to a handler, and writes stdout — which is what `add.md` §3 means by `interfaces/`. Putting it there rather than at a top-level `sidecar/` keeps it under the layer rules Slice 0 stood up, so the entrypoint that will eventually reach the pipeline is watched by the same lint that watches everything else. The alternative — a sibling directory outside `src/` — would be a second tree with no boundary rules on it, and the first thing to erode would be the sidecar importing `infrastructure/` directly.
+
+**The host writes temporary audio to an Otto-owned directory**, not the system temp root. The sweep in step 6 has to enumerate the files it is allowed to delete, and a sweep pointed at the system temp directory is a sweep that deletes other applications' files the first time a glob is written badly. A dedicated directory makes the sweep's blast radius the thing Otto created, which is the property worth having before any code deletes anything on a timer.
+
 ## Not in scope
 
 - **Storing anything.** Slice 2. The capture window accepts text and discards it; `CaptureStore` does not exist yet.
@@ -63,6 +70,8 @@ Four `stack.md` §8 questions, all of them blocking anything else in Rust:
 6. The orphaned-temporary-file sweep on supervisor restart.
 
 **The sidecar deletes, the host writes.** `runtime.md` §2 puts deletion on the sidecar after a successful transcription, and there is no transcriber here — but the ownership rule is the part worth having under test early, because it is what makes the temporary file safe to share between two processes at all. So the sidecar deletes after a successful *read* in this slice, and Slice 2 moves the delete point later in the same handler once transcription sits in front of it. The alternative — leaving deletion out until there is something to transcribe — ships a slice where the host writes files nobody removes, and makes the sweep in step 6 untestable, since every file would be an orphan.
+
+Which is also what makes step 6 a real test rather than a tautology. Because the sidecar deletes on the success path, the only file still on disk at restart is one whose reader died before it finished — so the sweep has exactly one way to find work, and the test has to produce that failure deliberately rather than just writing a file and waiting. A slice where deletion did not exist yet would leave every file an orphan and the sweep would pass without ever having swept anything.
 
 ## Verification
 

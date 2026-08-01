@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:boundaries": "vitest run tests/boundaries",
+    "build:sidecar": "tsc -p tsconfig.sidecar.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run format:check && npm run typecheck && npm run test"

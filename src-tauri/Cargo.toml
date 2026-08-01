@@ -1,0 +1,47 @@
+[package]
+name = "otto"
+version = "0.0.0"
+description = "Otto — a private, local system for personal knowledge"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+
+# The host is a shell around OS APIs (Slice 1): tray, hotkey, capture window,
+# audio, and the sidecar's lifecycle. No domain types, no persistence, and no
+# knowledge of what a Capture means — `add.md` §3's layer rules govern `src/`,
+# and the host stays thin enough that they never need to reach it.
+
+[lib]
+# Tauri's mobile targets require the app to be reachable as a library. Naming it
+# explicitly keeps the integration tests in `tests/` able to import it too.
+name = "otto_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2.3.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.19"
+
+# Audio capture. `cpal` records from the default input device on all three
+# platforms and `hound` writes the WAV that `whisper.cpp` accepts in Slice 2.
+# Nothing more — no mixing, no device selection, no format conversion beyond
+# what whisper requires.
+cpal = "0.18.1"
+hound = "3.5.1"
+
+[dev-dependencies]
+tempfile = "3.14.0"
+# Tauri's mock runtime, which is what lets the capture window be opened and
+# timed in a test without a display server.
+tauri = { version = "2.11.5", features = ["test"] }
+
+[features]
+# Tauri's default feature set is chosen by the CLI at build time; this exists so
+# `cargo build` without the CLI still resolves.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

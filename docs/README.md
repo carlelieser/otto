@@ -37,6 +37,7 @@ All decisions needed to begin implementation are settled. Where these documents 
 | [0014](./adr/0014-typed-fields-closed-relations-visible-discards.md) | Closed field and relation vocabularies; discards stay visible |
 | [0015](./adr/0015-salience-is-a-legible-projection.md) | Salience is a legible projection; v0 ships crude |
 | [0016](./adr/0016-local-inference-is-the-default.md) | Local inference is the default; cloud is opt-in and configurable per port |
+| [0017](./adr/0017-pinned-runtime-toolchain-and-sidecar-spawn.md) | Pinned Rust and Tauri versions; `cpal`/`hound` for audio; the sidecar spawn seam |
 
 ## Before the first line of code
 

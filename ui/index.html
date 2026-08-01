@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Otto</title>
+    <!--
+      The capture window. It accepts text and closes; it stores nothing, because
+      `CaptureStore` arrives in Slice 2. Plain HTML rather than Svelte: ADD §3
+      names Svelte for the UI, but no version, router, or component approach is
+      chosen yet (`stack.md` §8), and the dashboard in Slice 11 is where that
+      decision has something to answer to. A build step here would pin it early
+      on a window with one input in it.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        background: Canvas;
+      }
+      #capture {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        padding: 0 1.5rem;
+        font-size: 1.35rem;
+        line-height: 1.4;
+        background: transparent;
+        color: CanvasText;
+      }
+      #capture::placeholder {
+        opacity: 0.4;
+      }
+    </style>
+  </head>
+  <body>
+    <input
+      id="capture"
+      type="text"
+      autofocus
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="What's on your mind?"
+    />
+    <script>
+      const invoke = () => window.__TAURI__?.core?.invoke;
+      const field = document.getElementById("capture");
+
+      // Escape dismisses, Enter accepts. Both close the window and discard the
+      // text: there is nothing to write to until Slice 2.
+      field.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" && event.key !== "Enter") return;
+        field.value = "";
+        invoke()?.("close_capture_window");
+      });
+
+      // Refocus on every show, since the window is hidden rather than closed.
+      window.addEventListener("focus", () => field.focus());
+    </script>
+  </body>
+</html>

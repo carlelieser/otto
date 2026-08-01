@@ -1,0 +1,11 @@
+{
+  "measurement": "hotkey-to-window",
+  "runs": 200,
+  "first_open_ms": 0.966583,
+  "median_ms": 0.003709,
+  "p95_ms": 0.003917,
+  "bar_ms": 200,
+  "machine": "aarch64",
+  "os": "macos unix",
+  "note": "capture_window::show against Tauri's mock runtime; compositor paint and real WebView construction are not included."
+}
