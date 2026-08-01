@@ -46,9 +46,9 @@ Five levels, each testing something the others cannot.
 
 **Property-based tests** — for the invariants that must hold across *all* inputs rather than chosen ones. Rebuild determinism, redirect transitivity, idempotency under replay, and set-field union semantics are all statements of the form "for any sequence of events…", and example-based tests sample that space badly. This is the level most likely to be skipped and most likely to catch a Tier 0 bug.
 
-**In-memory integration tests** — the whole pipeline, ingestion through triage, against the in-memory adapters ADD §9 requires. No network, no SQLite, no Tauri. This is the payoff ADR-0001 says the layering is actually buying, and it is where the pipeline's *sequencing* is tested: resumability, stage ordering, and what happens when a stage returns nothing.
+**Offline integration tests** — the whole pipeline, ingestion through triage, with no network and no Tauri: model-facing ports on their stub adapters, storage on SQLite in `:memory:` (ADD §9). This is the payoff ADR-0001 says the layering is actually buying, and it is where the pipeline's *sequencing* is tested: resumability, stage ordering, and what happens when a stage returns nothing.
 
-**Persistence integration tests** — the same paths against real SQLite in WAL mode, because the in-memory adapters cannot exercise what `runtime.md` §4 measured. Projection rebuild, snapshot resume, and the two-process read/write split live here. The last of those matters more than it did before the spike: the spike was single-process, so UI-reads-while-worker-writes under WAL is the storage assumption that remains untested.
+**Persistence integration tests** — the same paths against SQLite on a real file in WAL mode, because `:memory:` cannot exercise what `runtime.md` §4 measured and cannot enter WAL at all. Projection rebuild, snapshot resume, and the two-process read/write split live here. The last of those matters more than it did before the spike: the spike was single-process, so UI-reads-while-worker-writes under WAL is the storage assumption that remains untested.
 
 **End-to-end tests** — the Tauri application, driven through the UI. Deliberately few, and only for paths where the integration of the three processes is itself the thing under test: tray capture to durable Capture, and review-queue adjudication to applied event. E2E tests are slow and flaky by nature; every one of them must justify why it cannot be an integration test.
 
@@ -68,6 +68,8 @@ ADR-0003 calls this the highest-value boundary in the tree, and ADD §3 makes th
 - A grep for `confidence` under `domain/` returns nothing (ADD §3's fourth rule, the one that is not generally checkable but whose most likely violation is).
 
 These are cheap, they fail loudly, and they catch the erosion ADR-0001 predicts will happen silently under time pressure. They should fail the build, not warn.
+
+**A test that cannot fail is worse than a missing one**, because it reports coverage it does not provide. Slice 0 shipped three: a WAL assertion matching `/wal|memory/` against a `:memory:` database, which always reports `memory` and cannot enter WAL at all; an adapter whose immutability nothing asserted; and a suite whose claim to run without SQLite was false. None were found by writing more tests. All were found by breaking the thing and checking the test noticed. **For anything in Tier 0, do that once before calling it done** — the whole tier guards properties whose violation cannot be repaired, and a green vacuous test is exactly the silent wrongness §1 says this plan exists to prevent.
 
 Beyond lint, one behavioural test: **`captures` and `events` have no UPDATE or DELETE path.** ADD §10 states there is no code path in Otto that updates or deletes a row in either table. This is verifiable directly — assert the absence at the repository level, and separately assert that the SQLite schema itself carries the constraint where it can (triggers rejecting UPDATE/DELETE on both tables). A test that the application layer does not do something is weaker than a database that will not permit it; do both.
 
