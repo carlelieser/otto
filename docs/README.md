@@ -49,7 +49,7 @@ After those, [`qa.md`](./qa.md) §12 has the build order.
 
 ## What is deliberately unresolved
 
-Not oversights. Each has a signal attached rather than a plan to deliberate further:
+Not oversights. Each names the signal that will answer it:
 
 - **Whether the thresholds are right.** They start strict; calibration moves them ([`triage.md`](./triage.md) §2).
 - **Whether salience v0 fails as predicted.** Brief instrumentation answers it ([`salience.md`](./salience.md) §3, §5).

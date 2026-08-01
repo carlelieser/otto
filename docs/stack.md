@@ -33,7 +33,7 @@ Two properties explain most of the choices below, and are worth holding while re
 
 ## 3. Process model
 
-Otto runs as three processes, and the split is architectural rather than packaging (ADD §4).
+Otto runs as three processes. The split is architectural: each boundary below exists for a stated reason, and ADD §4 owns it.
 
 ```mermaid
 flowchart LR
@@ -69,7 +69,7 @@ flowchart LR
 
 **SQLite, one file, WAL mode.** Assumed by ADR-0005 and validated by the spike in `runtime.md` §4 — all seven bars passed over a synthetic 5-year corpus, the closest by a factor of 20.
 
-**The vector index is SQLite-Vector 1.0** — [`sqliteai/sqlite-vector`](https://github.com/sqliteai/sqlite-vector), `runtime.md` §4.3. It is a loadable binary extension rather than an npm package, with prebuilt artefacts per platform, and it stores vectors as ordinary `BLOB` columns rather than in a virtual table. Otto stores Float32 and does not use the available quantization; §4.3 has the reasoning and the two things still to confirm — a re-measurement against the standing bar, and the licence.
+**The vector index is SQLite-Vector 1.0** — [`sqliteai/sqlite-vector`](https://github.com/sqliteai/sqlite-vector), `runtime.md` §4.3. It is a loadable binary extension rather than an npm package, with prebuilt artefacts per platform, and it stores vectors as ordinary `BLOB` columns in ordinary tables — no virtual table. Otto stores Float32 and does not use the available quantization; §4.3 has the reasoning and the two things still to confirm — a re-measurement against the standing bar, and the licence.
 
 The spike validated SQLite itself, not a dependency list — it was throwaway code, and the packages it happened to use are not decisions. The application's SQLite driver is unspecified; §8 records it as open.
 
@@ -105,8 +105,6 @@ Per-adapter differences are confined to *how* structured output is requested —
 
 ## 6. What the choices cost
 
-Stated because a stack page that lists only benefits is a sales document.
-
 - **Roughly 650 MB in the installer** before Otto's own code, from bundling `whisper.cpp` and an embedding model (ADR-0013). Accepted: working offline on first launch is worth more than a small download.
 - **Three providers means three copies of the extraction prompt** drifting apart — the acknowledged cost of task-shaped ports (ADR-0008), mitigated by the shared template above.
 - **A third process to supervise.** Rewriting the pipeline in Rust remains the option to revisit if the sidecar proves operationally annoying (ADR-0013).
@@ -122,7 +120,7 @@ The floor Otto must clear to claim local support is that **the local path produc
 
 ## 8. Not yet decided
 
-Genuinely open, rather than decided elsewhere and omitted here.
+Each of these is genuinely open. Nothing here is decided elsewhere and merely omitted.
 
 - **Test framework and runner.** `qa.md` specifies tiers, rigour, and release criteria, and names the *kinds* of test required — property-based tests and in-memory integration tests among them — but no runner, assertion library, or property-testing library is chosen.
 - **The SQLite driver.** The spike used `better-sqlite3`; nothing decides what the sidecar uses, and the driver must be able to load a binary extension (`runtime.md` §4.3).

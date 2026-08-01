@@ -8,7 +8,7 @@
 
 Otto is a single-user desktop application that turns prose into a maintained knowledge base. Four properties of that job drive every structural decision below; nothing else about the system is unusual enough to shape it.
 
-**It is probabilistic in the middle and exact at the edges.** Text arrives, an LLM reads it, and something definite happens to the user's data. The interesting failures live at the transition. The architecture's central move is to make that transition a place rather than a habit: a directory that cannot write (ADR-0003), a single executor that can, and an explicit stage between them where uncertainty turns into a decision.
+**It is probabilistic in the middle and exact at the edges.** Text arrives, an LLM reads it, and something definite happens to the user's data. The interesting failures live at the transition. The architecture's central move is to make that transition a place: a directory that cannot write (ADR-0003), a single executor that can, and an explicit stage between them where uncertainty turns into a decision.
 
 **Its history is part of what it stores.** Otto's subject is not the current state of the user's knowledge but how that understanding changed (ADR-0002). The event log is therefore the model, not an audit trail beside it (ADR-0005), and every read surface is derived from it.
 
@@ -126,7 +126,7 @@ The fourth is not mechanically checkable in general, but its most likely violati
 
 ## 4. Runtime and process model
 
-Otto is a Tauri application: a Rust host process and a WebView running Svelte. That gives three places code can run, and the split between them is a real architectural decision rather than a packaging detail.
+Otto is a Tauri application: a Rust host process and a WebView running Svelte. That gives three places code can run, and where each stage runs is decided below on its own merits.
 
 **The pipeline runtime is a Node sidecar** spawned and supervised by the Tauri host, speaking JSON-RPC over stdio, with SQLite in WAL mode shared between the writing sidecar and the reading host (ADR-0013). Rewriting the pipeline in Rust was the honest alternative and lost on ecosystem grounds; `runtime.md` §1 has the full comparison. A crashing sidecar restarts with backoff and, because the pipeline is resumable per stage, resumes rather than replays — degrading to "Captures accumulate," which is a state §11 already handles.
 
@@ -324,7 +324,7 @@ The test ADR-0008 gives holds throughout: if a port signature mentions `temperat
 
 **Three providers means three copies of the extraction prompt drifting apart** — the acknowledged cost of task-shaped ports. The mitigation is a shared prompt template in `infrastructure/llm/shared/`, with per-adapter differences confined to how structured output is requested: tool use, JSON mode, or grammar constraints, which genuinely do differ between Anthropic, OpenAI, and a local runtime.
 
-**In-memory adapters for every port ship alongside the real ones**, and this is the payoff ADR-0001 is actually buying. The entire pipeline — ingestion through triage — runs against them with no network and no database, which is what makes the eval set a test suite rather than an aspiration.
+**In-memory adapters for every port ship alongside the real ones**, and this is the payoff ADR-0001 is actually buying. The entire pipeline — ingestion through triage — runs against them with no network and no database, which is what lets the eval set run in CI on every commit.
 
 ## 10. Data model
 
@@ -358,7 +358,7 @@ The failure modes worth designing for are the ones that would break trust, since
 
 **The gate, half cleared.** The SQLite spike (`runtime.md` §4, ADR-0013) has been run and passed on all seven bars, so schema work is unblocked and the storage design stands as written. What remains is the local-extraction measurement (ADR-0013): whether a 7–8B model under grammar constraints clears the floor of "usable with more review friction, not corrupted." That is now the assumption in Otto most likely to be wrong, and the response to failing it is a larger minimum local model, never looser thresholds.
 
-**Deliberately deferred.** Split — semantics settled in ADR-0009, but the per-value review affordance is real interface work and, unlike merge, it has no cheap lossless fallback. Additional ingress paths and semantic search over notes stay post-MVP. All three are named seams rather than surprises: ingress is a new normaliser in `capture/`, and semantic search is a projection over embeddings that already exist for candidate generation.
+**Deliberately deferred.** Split — semantics settled in ADR-0009, but the per-value review affordance is real interface work and, unlike merge, it has no cheap lossless fallback. Additional ingress paths and semantic search over notes stay post-MVP. All three have a named seam: ingress is a new normaliser in `capture/`, and semantic search is a projection over embeddings that already exist for candidate generation.
 
 **Answerable only by use**, each with a signal attached rather than a plan to think harder later: whether the thresholds are set right (calibration moves them), whether salience v0 fails the way it predicts (brief instrumentation), whether the relation vocabulary is too small (`relates_to` share of the graph), and whether the field schema is missing fields (`notes` growth). Snapshot cadence has left this list — the spike measured rebuild cost and the answer is to keep the mechanism and leave it off (`runtime.md` §4.1).
 

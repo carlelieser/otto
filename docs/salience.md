@@ -34,8 +34,6 @@ salience = recency + open_loop + imminence + attention_debt − dormancy
 
 ## 3. What v0 is known to get wrong
 
-Stated now so that observing them is confirmation rather than discovery.
-
 **Everything decays at the same rate.** A quarterly planning Project and a lunch next Tuesday decay identically, which is wrong — different things have different natural rhythms. Fixing this properly needs per-entity or per-type decay rates, and there is no basis for choosing them yet.
 
 **Recency dominates.** A note written today about something unimportant will outrank a genuinely important stalled Project. This is the most likely v0 complaint and the most likely first fix.

@@ -63,7 +63,7 @@ On day one there are no Corrections, so the thresholds in §2 are guesses and `p
 
 **Bootstrap mode**: until **50 Corrections** have accumulated for the active provider and model version, `p(extraction)` is capped at `0.90` for the purpose of triage. Because the product in §1 then cannot reach the 0.90 band on any proposal that also required resolution, the practical effect is that **only unambiguous creates and updates to already-resolved entities auto-apply** during bootstrap. Everything requiring a resolution judgement waits.
 
-Fifty is ADR-0006's own number for what makes an eval set rather than an anecdote, and it is reached quickly — a Capture typically produces several proposals. Bootstrap mode is per provider and model version, so switching models re-enters it. That is correct and not an inconvenience: a threshold measured against one model says nothing about another (ADR-0008).
+Fifty is ADR-0006's own minimum for an eval set, and it is reached quickly — a Capture typically produces several proposals. Bootstrap mode is per provider and model version, so switching models re-enters it. That is correct and not an inconvenience: a threshold measured against one model says nothing about another (ADR-0008).
 
 Bootstrap status is visible in the dashboard rather than silent, since a user wondering why Otto is asking so many questions deserves the answer that it is still learning what it is worth.
 

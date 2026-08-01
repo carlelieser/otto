@@ -180,4 +180,4 @@ What remains is one technical gate and a set of things that can only be answered
 - Whether the field schema is missing fields — visible as the same fact being reinvented in `notes` (`schema.md` §7).
 - Whether the review burden during bootstrap is tolerable, or whether 50 corrections is too long to wait.
 
-Each of these has a signal attached rather than a plan to think harder about it later. That is the intended posture: ship the crude version with instrumentation, and let use answer what deliberation cannot.
+Each of these names the signal that answers it. That is the intended posture: ship the crude version with instrumentation, and let use answer what deliberation cannot.
