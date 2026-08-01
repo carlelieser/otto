@@ -2,7 +2,7 @@
 
 > Status: v0 accepted for MVP, and expected to be replaced. Architecture in [`add.md`](./add.md) §8; product intent in [`prd.md`](./prd.md) §5.7.
 >
-> Earlier drafts of the PRD called this the largest undesigned area of the product, and they were right. This document does not claim to solve it. It specifies a deliberately crude v0 that ships, states what it is known to get wrong, and relies on ADD §8's architectural bet — salience is a projection, so the rules can be replaced and recomputed from history rather than migrated.
+> This document does not claim to solve salience. It specifies a deliberately crude v0 that ships, states what it is known to get wrong, and relies on ADD §8's architectural bet — salience is a projection, so the rules can be replaced and recomputed from history rather than migrated.
 
 ## 1. Why a crude answer beats no answer
 

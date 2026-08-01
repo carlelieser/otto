@@ -19,7 +19,7 @@ The multiplication treats the two as independent, which they are not — a Captu
 
 **Where `p(resolution)` comes from.** The scorer, never the model's self-report. Features are name similarity, co-occurrence with other entities resolved in the same Capture, recency of contact, and type agreement (ADD §5.3). When LLM adjudication runs, its choice selects *which* candidate, and the scorer's margin between the top two candidates supplies the number — an adjudicated pick among near-identical candidates is not made confident by having been adjudicated.
 
-**Where `p(extraction)` comes from.** This one has no scorer, and pretending otherwise would be dishonest. It is the model's own report, and it is therefore **treated as a floor rather than a probability until calibration has data**: §4 describes the bootstrap under which it cannot on its own lift a proposal into auto-apply.
+**Where `p(extraction)` comes from.** This one has no scorer. It is the model's own report, and is therefore **treated as a floor rather than a probability until calibration has data**: §4 describes the bootstrap under which it cannot on its own lift a proposal into auto-apply.
 
 ## 2. Thresholds
 
@@ -31,7 +31,7 @@ Keyed by provider and model version (ADR-0008), stored in `inference/calibration
 | Middle | `0.50 – 0.90` | `needs_review` |
 | Low | `< 0.50` | `discard` |
 
-These three numbers are **initial values, chosen to be wrong in the safe direction**, and the entire calibration apparatus (ADR-0006) exists to replace them with measured ones. Two notes on how they were picked:
+These three numbers are **initial values, chosen to be wrong in the safe direction**, and the entire calibration apparatus (ADR-0006) exists to replace them with measured ones.
 
 **0.90 is high on purpose.** At single-user volume the cost of an extra review is a few seconds; the cost of a confidently wrong auto-apply is a fact the user believes and does not check. Those are not symmetric, and the threshold should not be either. Expect the measured value to move *down* as calibration data arrives, and treat any impulse to move it down before then as the thing calibration exists to prevent.
 
@@ -51,7 +51,7 @@ These three numbers are **initial values, chosen to be wrong in the safe directi
 | `merge` | **downgrade to `needs_review`**, always | ADR-0007, ADR-0009. |
 | `split` | **downgrade to `needs_review`**, always | ADR-0007, ADR-0009. |
 
-**The `create` rule needs its exception explained**, because it is the one place this table is more permissive than a flat reading of "creates are additive."
+**The `create` rule is the one place this table is more permissive than a flat reading of "creates are additive."**
 
 A note saying "had lunch with Priya about the Meridian rollout" mentions two things Otto has never seen. Sending both to review makes the very first use of Otto a form to fill in, which is the failure PRD §4.1 is built to avoid. So a `create` **auto-applies when the Mention is unambiguous** — meaning candidate generation returned nothing above the noise floor, so there is no entity this could plausibly be instead. That is the case where creating is not a guess.
 
@@ -69,9 +69,7 @@ Bootstrap status is visible in the dashboard rather than silent, since a user wo
 
 ## 5. Duplicates before merge exists
 
-Resolution is biased toward "none of these" (ADR-0009), which produces duplicates by design. The PRD originally deferred all of merge, which would have shipped an MVP with the failure mode and no repair.
-
-Three things close that gap without pulling the full merge/split review UI forward.
+Resolution is biased toward "none of these" (ADR-0009), which produces duplicates by design. Three things close that gap without pulling the full merge/split review UI forward.
 
 **The `create` review rule above** catches most duplicates before they exist, at the moment Otto is deciding to create a second Sarah rather than weeks later.
 
@@ -101,7 +99,7 @@ At a plausible early volume — a few Captures a day, several proposals each —
 
 ## 7. Discarded proposals are visible
 
-Triage has three outcomes, and PRD §5.4 only described two arriving in the queue. Left there, `discard` means Otto silently drops things — which sits badly against the principle that the user can always see what Otto did (PRD §4.3).
+A silent `discard` would sit badly against the principle that the user can always see what Otto did (PRD §4.3).
 
 Discarded proposals are **recorded and shown in a collapsed "not acted on" section of the review queue**, defaulting to hidden, retained for 30 days. The user never has to look. But "why didn't Otto pick that up?" has an answer, and the low threshold has an audit trail.
 
@@ -109,7 +107,7 @@ This is a deliberately small surface: a list of what was dropped and from which 
 
 ## 8. Staleness at apply time
 
-A proposal stamped with an aggregate version that no longer matches fails its check and is re-proposed against current state (ADD §5.6). Three details that the executor needs and the ADD left implicit:
+A proposal stamped with an aggregate version that no longer matches fails its check and is re-proposed against current state (ADD §5.6). Three details the executor needs:
 
 **Re-proposal is a pipeline re-entry from the differ, not from extraction.** The extracted values are still valid — the text did not change. Only the comparison against current state is stale. This is cheap and involves no LLM call.
 

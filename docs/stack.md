@@ -2,13 +2,13 @@
 
 > Status: accepted for MVP, and derivative. Architecture in [`add.md`](./add.md); runtime and inference in [`runtime.md`](./runtime.md); settled decisions in [`docs/adr/`](./adr/).
 >
-> This document decides nothing. It collects the technology choices already made in `add.md`, `runtime.md`, and the ADRs into one place, because they were settled across three documents and there was nowhere to read the stack off in full. Every row points at the document that owns it — **where this page and its source disagree, this page is wrong** and should be corrected rather than argued with.
+> This document decides nothing. It collects the technology choices already made in `add.md`, `runtime.md`, and the ADRs into one place. Every row points at the document that owns it — **where this page and its source disagree, this page is wrong.**
 
 ## 1. How to read this
 
 Otto is a local-first desktop application: a Rust host, a Svelte WebView, and a TypeScript pipeline in a Node sidecar, over one SQLite file. Nothing here is a service, and nothing here requires a network to function (PRD §6).
 
-Two properties explain most of the choices below, and are worth holding while reading:
+Two properties explain most of the choices below:
 
 **Local must actually work, not nominally work.** ADR-0008 and PRD §4.6 make fully local operation a requirement. That is why transcription and embeddings have no cloud option at all, and why the local extraction path is named and budgeted rather than described as a fallback.
 
@@ -71,7 +71,7 @@ flowchart LR
 
 **The vector index is SQLite-Vector 1.0** — [`sqliteai/sqlite-vector`](https://github.com/sqliteai/sqlite-vector), `runtime.md` §4.3. It is a loadable binary extension rather than an npm package, with prebuilt artefacts per platform, and it stores vectors as ordinary `BLOB` columns in ordinary tables — no virtual table. Otto stores Float32 and does not use the available quantization; §4.3 has the reasoning and the two things still to confirm — a re-measurement against the standing bar, and the licence.
 
-The spike validated SQLite itself, not a dependency list — it was throwaway code, and the packages it happened to use are not decisions. The application's SQLite driver is unspecified; §8 records it as open.
+The spike validated SQLite itself, not a dependency list — the packages its throwaway harness used are not decisions. The application's SQLite driver is unspecified; §8 records it as open.
 
 **Snapshotting is built but switched off** (`runtime.md` §4.1). Full rebuild is 215 ms at the specified corpus; the cadence is set to never and revisited if the log passes ~1M events. The mechanism is the expensive part to add later; the cadence is a constant.
 
@@ -119,8 +119,6 @@ The floor Otto must clear to claim local support is that **the local path produc
 **This is the one gate still open.** `prd.md` §9 lists two technical gates on implementation; the SQLite spike was the other and has passed. The local-extraction quality measurement has not been run.
 
 ## 8. Not yet decided
-
-Each of these is genuinely open. Nothing here is decided elsewhere and merely omitted.
 
 - **Test framework and runner.** `qa.md` specifies tiers, rigour, and release criteria, and names the *kinds* of test required — property-based tests and in-memory integration tests among them — but no runner, assertion library, or property-testing library is chosen.
 - **The SQLite driver.** The spike used `better-sqlite3`; nothing decides what the sidecar uses, and the driver must be able to load a binary extension (`runtime.md` §4.3).

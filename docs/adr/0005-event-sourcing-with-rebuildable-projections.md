@@ -10,7 +10,7 @@ The append-only event log, together with the immutable capture records that feed
 
 We chose this over the lighter alternative (mutable entity tables plus an append-only `changes` table carrying provenance columns), which would have delivered the audit trail and revert without any replay machinery.
 
-**The justification, restated without ADR-0004.** The original argument was that Assertions made the log the model rather than an audit artifact beside it. That argument is gone, and three independent ones remain, each sufficient on its own.
+**The justification, restated without ADR-0004.** The original argument — that Assertions made the log the model rather than an audit artifact beside it — is gone. Three independent ones remain, each sufficient on its own.
 
 *The domain is revision* (ADR-0002). Otto's subject is not the current state of the user's knowledge but how that understanding changed. A system whose subject matter is change stores change as its primary artifact; storing current state and journaling the changes beside it inverts what is truth and what is derived, in the one system where that distinction is the product.
 

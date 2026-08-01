@@ -2,7 +2,7 @@
 
 > Status: accepted for MVP. Vocabulary lives in [`CONTEXT.md`](../CONTEXT.md); architecture in [`add.md`](./add.md); settled decisions in [`docs/adr/`](./adr/).
 >
-> This document is the field-level model that ADR-0010 made load-bearing. It is not the SQL schema — it is the list of things Otto is allowed to know, which the extractor's output schema, the differ's cardinality rules, and the entity views all derive from. The SQL follows from this; where they disagree, this document is wrong and should be corrected rather than worked around.
+> This document is the field-level model that ADR-0010 made load-bearing. It is not the SQL schema — it is the list of things Otto is allowed to know, which the extractor's output schema, the differ's cardinality rules, and the entity views all derive from. The SQL follows from this; where they disagree, this document is wrong.
 
 ## 1. How to read this
 
@@ -23,7 +23,7 @@ Two conventions apply to every entity and are not repeated in the tables:
 
 ## 2. Shared fields
 
-These five fields mean the same thing on every entity type, and are defined once here rather than repeated with drift.
+These five fields mean the same thing on every entity type.
 
 | Field | Type | Cardinality | Extractable | Floor | Notes |
 |---|---|---|---|---|---|
@@ -90,7 +90,7 @@ An ongoing effort the user is involved in, which may outlive the people associat
 
 A Relation is a named, directed, revisable link between two entities (`CONTEXT.md`). The vocabulary is **closed**, for the reason given below.
 
-ADR-0010 closed the predicate-vocabulary question for *fields*, but Relations reopen exactly the same problem at the edge level: an open set means Extraction invents relation names and the graph fragments into `works_on`, `working_on`, and `involved_with` meaning one thing. So the set is fixed, small, and typed by the pair of entity types it connects. Adding a relation name is a schema change — the same honest cost ADR-0010 accepted for fields.
+ADR-0010 closed the predicate-vocabulary question for *fields*, but Relations reopen the same problem at the edge level: an open set means Extraction invents relation names and the graph fragments into `works_on`, `working_on`, and `involved_with` meaning one thing. So the set is fixed, small, and typed by the pair of entity types it connects. Adding a relation name is a schema change — the same honest cost ADR-0010 accepted for fields.
 
 | Relation | From → To | Cardinality | Notes |
 |---|---|---|---|
