@@ -19,7 +19,11 @@ The process model belongs here rather than in Slice 0 because Slice 0 is a libra
 
 ## In scope
 
-**The three-process runtime.** Tauri host (Rust), Node sidecar, Svelte WebView, per `runtime.md` §1. JSON-RPC over stdio — no local HTTP port, because there is nothing to conflict with, firewall, or accidentally expose. SQLite opened by both processes in WAL mode, the sidecar writing and the host reading.
+**The three-process runtime.** Tauri host (Rust), Node sidecar, Svelte WebView, per `runtime.md` §1. JSON-RPC over stdio — no local HTTP port, because there is nothing to conflict with, firewall, or accidentally expose.
+
+**No SQLite in the host.** `runtime.md` §1 describes the steady state as SQLite opened by both processes in WAL mode, the sidecar writing and the host reading. That is the destination, not this slice: nothing here stores anything, so nothing here needs to read it. Adding `rusqlite` now would buy a second SQLite dependency, a second extension-loading story for the vector extension, and a schema the host has to understand — in exchange for no behaviour at all.
+
+It is also a decision better made later on its merits. The host reading the database is what lets it serve the WebView's queries (`add.md` §4), and that commitment belongs where the first read query exists to test it — Slice 6 — rather than here, where there is nothing to read and nothing yet to get wrong. The sidecar opens SQLite in Slice 2 and stays its only user until then.
 
 **`src-tauri/`**, with its own `Cargo.toml`. The Tauri host owns the tray, the global hotkey, the capture window, audio recording, the sidecar's lifecycle, and the JSON-RPC client half of the transport. Nothing else. The host is a shell around OS APIs — no domain types, no persistence, no knowledge of what a Capture means. `add.md` §3's layer rules govern `src/`; the host stays thin enough that they never need to reach it.
 
