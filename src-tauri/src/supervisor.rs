@@ -24,11 +24,22 @@ pub struct SidecarConfig {
     pub interpreter: PathBuf,
     pub script: PathBuf,
     pub recordings: PathBuf,
+    /// Extra environment for the spawned sidecar: where its database lives, and
+    /// where the transcriber's binary and model are. The host does not read any
+    /// of them — it only passes them on, because the sidecar owns SQLite
+    /// (`runtime.md` §1) and the `Transcriber` port.
+    pub environment: Vec<(String, String)>,
 }
 
 impl SidecarConfig {
     pub fn new(interpreter: PathBuf, script: PathBuf, recordings: PathBuf) -> Self {
-        Self { interpreter, script, recordings }
+        Self { interpreter, script, recordings, environment: Vec::new() }
+    }
+
+    /// Adds a variable the sidecar is spawned with.
+    pub fn with_environment(mut self, key: &str, value: &str) -> Self {
+        self.environment.push((key.to_string(), value.to_string()));
+        self
     }
 }
 
@@ -73,6 +84,7 @@ impl Supervisor {
     fn spawn(&self) -> Result<Child, SupervisorError> {
         Command::new(&self.config.interpreter)
             .arg(&self.config.script)
+            .envs(self.config.environment.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

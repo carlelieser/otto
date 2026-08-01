@@ -4,12 +4,13 @@
     <meta charset="utf-8" />
     <title>Otto</title>
     <!--
-      The capture window. It accepts text and closes; it stores nothing, because
-      `CaptureStore` arrives in Slice 2. Plain HTML rather than Svelte: ADD §3
-      names Svelte for the UI, but no version, router, or component approach is
-      chosen yet (`stack.md` §8), and the dashboard in Slice 11 is where that
-      decision has something to answer to. A build step here would pin it early
-      on a window with one input in it.
+      The capture window. It accepts text and stores it: Enter sends the text to
+      the sidecar through the host, and the window closes once the Capture is
+      durable. Plain HTML rather than Svelte: ADD §3 names Svelte for the UI, but
+      no version, router, or component approach is chosen yet (`stack.md` §8),
+      and the dashboard in Slice 11 is where that decision has something to
+      answer to. A build step here would pin it early on a window with one input
+      in it.
     -->
     <style>
       :root {
@@ -22,6 +23,9 @@
         display: flex;
         align-items: center;
         background: Canvas;
+      }
+      #window {
+        width: 100%;
       }
       #capture {
         width: 100%;
@@ -36,27 +40,82 @@
       #capture::placeholder {
         opacity: 0.4;
       }
+      #capture[aria-invalid="true"] {
+        color: LinkText;
+      }
+      /* Empty until something fails, so it takes no space in the common case. */
+      #failure:empty {
+        display: none;
+      }
+      #failure {
+        margin: 0.5rem 0 0;
+        padding: 0 1.5rem;
+        font-size: 0.8rem;
+        color: LinkText;
+      }
     </style>
   </head>
   <body>
-    <input
-      id="capture"
-      type="text"
-      autofocus
-      autocomplete="off"
-      spellcheck="false"
-      placeholder="What's on your mind?"
-    />
+    <div id="window">
+      <input
+        id="capture"
+        type="text"
+        autofocus
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="What's on your mind?"
+      />
+      <p id="failure" role="alert"></p>
+    </div>
     <script>
       const invoke = () => window.__TAURI__?.core?.invoke;
       const field = document.getElementById("capture");
+      const failure = document.getElementById("failure");
 
-      // Escape dismisses, Enter accepts. Both close the window and discard the
-      // text: there is nothing to write to until Slice 2.
-      field.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape" && event.key !== "Enter") return;
+      function dismiss() {
         field.value = "";
+        clearFailure();
         invoke()?.("close_capture_window");
+      }
+
+      function clearFailure() {
+        failure.textContent = "";
+        field.removeAttribute("aria-invalid");
+      }
+
+      // Capture is the one path where the user is waiting, so a write failure
+      // is shown rather than swallowed (`qa.md` §4.2). The text stays in the
+      // field: losing their words silently is the worst non-log failure in the
+      // system, and the window staying open is what makes a retry possible.
+      function reportFailure(error) {
+        failure.textContent = `Not saved — ${String(error)}`;
+        field.setAttribute("aria-invalid", "true");
+        field.focus();
+      }
+
+      async function submit() {
+        const text = field.value;
+        if (text.trim() === "") return dismiss();
+
+        clearFailure();
+        field.disabled = true;
+        try {
+          await invoke()?.("capture_text", { text });
+          dismiss();
+        } catch (error) {
+          reportFailure(error);
+        } finally {
+          field.disabled = false;
+        }
+      }
+
+      // Escape dismisses without storing; Enter captures. Enter closes the
+      // window only once the Capture is durable.
+      field.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") return dismiss();
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        void submit();
       });
 
       // Refocus on every show, since the window is hidden rather than closed.

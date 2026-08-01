@@ -1,5 +1,11 @@
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
+import {
+  createIngestion,
+  createRecovery,
+  createStorage,
+  createTranscriber,
+} from "../../composition-root.js";
 import { dispatch, type Methods } from "./dispatch.js";
 import { sidecarMethods } from "./methods.js";
 
@@ -29,6 +35,27 @@ export async function runSidecar(
 }
 
 /**
+ * Everything the sidecar needs to capture, wired to the real adapters, with the
+ * startup sweep run before the first request is served.
+ *
+ * The sweep goes here rather than inside a handler because it is a recovery
+ * step for the *previous* run: a Capture whose event never landed is invisible
+ * to the pipeline until it is re-emitted, and the moment both processes agree
+ * nothing is mid-write is startup.
+ */
+async function startCaptureSidecar(): Promise<void> {
+  const databaseFile = process.env.OTTO_DATABASE;
+  const storage = createStorage(databaseFile === undefined ? {} : { databaseFile });
+  const ingestion = createIngestion(storage);
+  await createRecovery(storage, ingestion).recoverUningestedCaptures();
+  await runSidecar(
+    process.stdin,
+    process.stdout,
+    sidecarMethods({ ingestion, transcriber: createTranscriber() }),
+  );
+}
+
+/**
  * Only run the loop when executed as a program, so tests can import the module.
  *
  * Compared by resolved path rather than by filename: a suffix match would also
@@ -37,5 +64,5 @@ export async function runSidecar(
  */
 const entrypoint = process.argv[1];
 if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) {
-  await runSidecar();
+  await startCaptureSidecar();
 }
