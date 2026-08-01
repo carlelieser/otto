@@ -1,6 +1,10 @@
+import type Database from "better-sqlite3";
 import { CAPTURE_TRANSLATORS } from "./application/pipeline/capture-translators.js";
 import { Executor } from "./application/pipeline/execute-command.js";
+import { openDatabase } from "./infrastructure/persistence/database.js";
+import { SqliteCaptureStore } from "./infrastructure/persistence/sqlite-capture-store.js";
 import { SqliteEventStore } from "./infrastructure/persistence/sqlite-event-store.js";
+import type { CaptureStore } from "./ports/capture-store.js";
 import type { EventStore } from "./ports/event-store.js";
 
 /**
@@ -28,7 +32,30 @@ export interface StorageOptions {
  * there is nothing to stand in for a real extractor.
  */
 export function createEventStore(options: StorageOptions = {}): EventStore {
-  return new SqliteEventStore(options.databaseFile ?? ":memory:");
+  return new SqliteEventStore(openDatabase(options.databaseFile));
+}
+
+/**
+ * Both truth tables, on one connection.
+ *
+ * They are separate ports because Captures are input and events are change
+ * (`add.md` §9), and one connection because the startup sweep anti-joins across
+ * both tables — and because WAL assumes a single writer (`runtime.md` §1).
+ */
+export interface Storage {
+  readonly events: EventStore;
+  readonly captures: CaptureStore;
+  /** Closes the shared connection. Neither store owns it, so neither closes it. */
+  readonly close: () => void;
+}
+
+export function createStorage(options: StorageOptions = {}): Storage {
+  const database: Database.Database = openDatabase(options.databaseFile);
+  return {
+    events: new SqliteEventStore(database),
+    captures: new SqliteCaptureStore(database),
+    close: () => database.close(),
+  };
 }
 
 /** The executor, wired to a store. The clock is injected so tests can pin it. */
