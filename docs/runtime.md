@@ -64,7 +64,11 @@ Name accuracy is the metric that matters, not general WER: "Sarah" transcribed a
 
 **Transcription runs in the sidecar, not the host.** §1 puts audio capture in Rust because that is where the OS APIs are, which invites the assumption that transcription follows it there. It does not: ADD §9 puts transcription behind the `Transcriber` port, and `ports/` is TypeScript. An adapter in Rust would be a port implementation in a language with no ports directory and no lint rule watching the boundary.
 
-The host records to a temporary file and passes the *path* over stdio; the sidecar reads it, transcribes, and deletes it. Audio bytes never cross the transport — a path is small and a WAV is not. The cost is a temporary file owned by two processes: the host writes it, the sidecar deletes it after a successful read, and the supervisor sweeps orphans on restart.
+The host records to a temporary file and passes the *path* over stdio; the sidecar reads it, transcribes, and deletes it. Audio bytes never cross the transport — a path is small and a WAV is not. The cost is a temporary file owned by two processes: the host writes it, the sidecar deletes it after a successful ingestion, and the supervisor sweeps orphans on restart.
+
+**Transcription and ingestion are one call, not two.** The sidecar exposes `ingestVoice`, which transcribes, persists the Capture, and then deletes the file. Splitting it into a transcribe call and an ingest call would put the durability boundary between two round trips and make the host — the process with no database access — responsible for closing the gap. The crash window `qa.md` §4.2 accepts is the one inside that single handler; a second one between calls is not accepted, so the shape of the transport is what keeps it from existing.
+
+**The host sends recording-start time alongside the path**, since `source_timestamp` for a voice Capture is when recording started (§3) and only the host knows that instant. It is a required field: a sidecar falling back to its own clock would record transcription-completion time under recording-start's name, which is exactly the duplicate-producing bug §3 exists to prevent.
 
 `large-v3` is offered as an optional download for users who want it. The bundled default optimises for working immediately.
 

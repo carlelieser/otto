@@ -31,9 +31,10 @@ export interface AudioReadResult {
  *
  * `runtime.md` §2 puts deletion on the sidecar after a successful
  * transcription; there is no transcriber until Slice 2, so this deletes after a
- * successful *read* and Slice 2 moves the delete point later in this same
- * handler once transcription sits in front of it. Audio bytes never cross the
- * transport — a path is small and a WAV is not.
+ * successful *read*. Slice 2 replaces this method with `ingestVoice`, which
+ * transcribes and persists before deleting — one call rather than two, so the
+ * durability boundary does not fall between round trips. Audio bytes never
+ * cross the transport — a path is small and a WAV is not.
  *
  * Deleting only after the size is known is what makes the supervisor's sweep
  * meaningful: a file still on disk at restart is one whose reader died, which

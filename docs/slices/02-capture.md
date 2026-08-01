@@ -2,6 +2,7 @@
 
 > Depends on: Slice 1. Blocks: Slice 3.
 > Sources: [`prd.md`](../prd.md) §5.1; [`add.md`](../add.md) §5.1, §9, §11; [`runtime.md`](../runtime.md) §2, §3, §5; [`qa.md`](../qa.md) §4.1, §4.2, §4.3, §6.4, §8; ADR-0013.
+> Decisions taken here are recorded in [ADR-0018](../adr/0018-voice-ingestion-is-one-call.md).
 
 ## What it closes
 
@@ -92,6 +93,8 @@ proposal_id = "prop-" + sha256_hex([
 
 What model transcribed a Capture is still worth knowing, and it belongs on the Capture rather than in Provenance. The `captures` row records the transcription model alongside `source`, where it describes the input rather than an inference. Nothing in the MVP reads it — Slice 9 excludes re-transcription — so it is recorded because it cannot be reconstructed afterwards, the same reasoning ADR-0006 applies to provenance generally. A `large-v3` upgrade someday needs to know which Captures came from `small.en`, and by then the answer is unrecoverable if it was never written down.
 
+**It does not go on `CaptureIngestedPayload`**, which is worth stating rather than leaving to be inferred from its absence above. The column is its one home. Adding it to the event payload as well would be a third place the same fact lives — after the row and the model file itself — and the rule against that is the same one that keeps corrected text off this payload: two records of one fact are two records that can disagree. Nothing downstream reads the transcription model in the MVP, so there is no consumer the event would be serving; the slice that first needs it can read the `captures` row, which is where the sweep and the id derivation already look.
+
 **Slice 0's test fixtures contradict this and are corrected here.** `tests/support/builders.ts` builds a Capture's Provenance with `provider: "local"`, `modelVersion: "qwen2.5-7b-instruct"`, `confidence: 0.92`, and `proposalId: "prop-1"` — an extraction's provenance attached to an ingestion event. It is well-formed, so nothing failed; it was a placeholder written when `CaptureIngested` existed only to prove the write path had two ends. Adopting it by imitation is the likely failure mode, since it is the only worked example in the repository. `aProvenance` stays as it is for the inference slices that will need it, and the Capture builders switch to `humanConfirmedProvenance`.
 
 Two smaller corrections in the same area, both cheap now and awkward later:
@@ -99,7 +102,19 @@ Two smaller corrections in the same area, both cheap now and awkward later:
 - **`CaptureIngestedPayload.contentHash`'s doc comment describes it as `hash(source, sourceTimestamp, contentHash)`** (`domain/events/capture-ingested.ts`), which defines the field in terms of itself. It is an *input* to `capture_id`, not the key. The comment is wrong rather than the field.
 - **The fixture's `"sha256:abc123"` is not a value this slice's derivation can produce.** No hash in Otto carries an algorithm prefix, and `content_hash` is 64 hex characters. Fixtures that cannot occur in production are how an assumption about format survives until something parses it.
 
+**The sidecar's two ingestion methods, and why voice is one call rather than two.** Slice 1 left a `readAudio` method at the far end of the path handoff, which read the file, reported its size, and deleted it. This slice replaces it with `ingestVoice`, and adds `ingestTyped` as its sibling. Both return the resulting Capture.
+
+`ingestVoice` transcribes, ingests, and *then* deletes, in one call. The alternative — a `transcribe` call followed by a separate `ingest` call — puts the durability boundary between two round trips, which opens a second crash window on top of the one Verification below accepts. That accepted window exists between transcription and persistence *within* a single handler; splitting the call widens it into a gap the host is responsible for closing, and the host is the process with no database access at all. One call keeps the boundary where §4.2 of `qa.md` put it.
+
+This is not a new decision so much as the one Slice 1 deferred: it said the sidecar "deletes after a successful *read* in this slice, and Slice 2 moves the delete point later in the same handler once transcription sits in front of it." Renaming the method is what that move looks like when it lands. Slice 1's ownership rule is unchanged — the host writes the temporary file, the sidecar deletes it, and the supervisor sweeps orphans — only the definition of "successful" moves from a completed read to a completed ingestion.
+
+**The host passes recording-start time with the path.** `source_timestamp` for a voice Capture is when recording started (above), and recording start is a fact only the host knows: it is the instant `Recording::start` opened the input device (`src-tauri/src/audio.rs`). Nothing in Slice 1's transport carries it — the path handoff passes a path and nothing else — so `ingestVoice` takes both, and the host formats the timestamp to the exact `YYYY-MM-DDTHH:MM:SS.sssZ` shape specified above before sending it.
+
+The failure mode worth naming: a sidecar that defaults to its own clock when the field is absent produces a `source_timestamp` that is transcription-completion time wearing recording-start's name, and the retried-upload test in Verification then passes on a fast machine and fails on a slow one. So the field is required rather than defaulted — a missing `sourceTimestamp` is an error, not a shrug.
+
 **Ingestion, and its hard rule.** Transcription, whitespace and transcript cleanup, timestamping, deduplication — and nothing semantic. `add.md` §5.1 uses date-noticing as the specific example of what ingestion must not do. The temptation is constant and moving it earlier turns a normaliser into a second, undisciplined extractor.
+
+**Both methods share one ingestion path.** `ingestVoice` and `ingestTyped` differ in how they obtain text and in what `source` they set; everything after that — normalise, timestamp, derive `capture_id`, write the row, build the Command, call the executor — is one internal function both call. Build order step 4 specifies that sequence precisely because getting it backwards produces a system that works until the first crash, and two call sites each remembering the order is two chances to get it wrong instead of one.
 
 **Normalisation, exhaustively.** "Whitespace and transcript cleanup" needs a closed list, because a normaliser with an open brief is the second extractor `add.md` §5.1 warns about. It does exactly three things, in this order:
 
@@ -144,19 +159,22 @@ That the payload is excluded from `eventId` matters twice over: it is what makes
 2. `CaptureStore` port and its SQLite adapter. One adapter, per `add.md` §9 — `:memory:` is the offline mode, and a second implementation of a storage port is what Slice 0 removed. This adds the repository-level half of `qa.md` §4.1's pair, which could not be written without the port.
 3. Normalisation and the two id derivations, as pure functions with no I/O. They are the most specified thing in this slice and the easiest to test in isolation.
 4. Ingestion, in this order: normalise, timestamp, derive `capture_id`, write the `captures` row, *then* build the Command and call the executor. The id is computed first because `deriveEventId` hashes `provenance.captureId` (`application/pipeline/event-identity.ts`) — the Command cannot be constructed until the id exists, and the row cannot be written after the event without inverting the recovery order above. This is easy to get backwards and produces a system that works until the first crash.
-5. Typed capture from Slice 1's window through to a durable Capture, emitting `CaptureIngested` through Slice 0's executor.
+5. Typed capture from Slice 1's window through to a durable Capture, emitting `CaptureIngested` through Slice 0's executor. This is where `ingestTyped` replaces the window's discard.
 6. The startup sweep that re-emits events for rows that have none.
-7. `Transcriber` port and the `whisper-cli` adapter, at the far end of Slice 1's path handoff; voice capture through the same ingestion path.
+7. `Transcriber` port and the `whisper-cli` adapter, at the far end of Slice 1's path handoff; `ingestVoice` replaces `readAudio`, and the host begins sending recording-start alongside the path. Voice capture runs through the same ingestion path as typed.
 8. The eval corpus for transcription, then the latency and recall measurements.
+
+**Step 7 is where the local-toolchain dependency bites.** Steps 1–6 need nothing a clean checkout does not have. Step 7's adapter is buildable and unit-testable with the spawn stubbed — the `Transcriber` port takes a path and returns text, which is mockable without a binary — but its integration test needs a real `whisper-cli` and a real `small.en`, so it is tagged out of the default run alongside the measurements below. Step 8 additionally needs the corpus, which is human work (see Verification).
 
 ## Verification
 
 Tier 0 (`qa.md` §4.2, §4.3), plus the process-model test from §8:
 
 - **A Capture is durably persisted before extraction is invoked.** Assert the ordering, not eventual presence — inject a failure at the extraction stage and confirm the Capture survives.
-- **A crash between transcription and Capture persistence loses the audio, and this is the accepted behaviour.** The test documents the boundary rather than asserting recovery, and exists so that a future change moving work before the durability point does not pass silently.
+- **A crash between transcription and Capture persistence loses the audio, and this is the accepted behaviour.** The test documents the boundary rather than asserting recovery, and exists so that a future change moving work before the durability point does not pass silently. It is accepted only because both steps sit inside `ingestVoice`: the window is one handler wide and no process boundary crosses it. Splitting ingestion back into two calls would widen this window without widening the acceptance, which is the change this test is positioned to catch.
 - Capture write failure surfaces to the user synchronously.
-- **Double-delivered input produces one Capture** (§4.3). A retried voice upload yields the same `capture_id`, and the second insert returns the stored Capture rather than throwing.
+- **Double-delivered input produces one Capture** (§4.3). A retried voice upload yields the same `capture_id`, and the second insert returns the stored Capture rather than throwing. The retry must reuse the original recording-start timestamp, which is what makes this a test of the derivation rather than of the clock — assert it against a transcriber stubbed to take visibly different durations on the two runs, so an implementation that quietly timestamps at transcription-completion fails here rather than intermittently in production.
+- **`ingestVoice` rejects a missing or malformed `sourceTimestamp`** rather than substituting its own clock. The whole of the previous bullet rests on the host supplying it, so the absence has to be loud.
 - **A crash between the `captures` write and the event append is recovered by the startup sweep**, producing exactly one `CaptureIngested`. Run the sweep twice in the same test — the second pass must append nothing, which is what proves it rides on `deriveEventId` rather than on bookkeeping of its own.
 - `captures` rejects UPDATE and DELETE at the SQLite level.
 - **Normalisation is exactly the three stated rules.** Assert the transformations *and* their limits: punctuation, capitalisation, and filler words survive untouched. This is the test that fails when someone adds a fourth rule, which is the point of it.

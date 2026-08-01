@@ -38,6 +38,7 @@ All decisions needed to begin implementation are settled. Where these documents 
 | [0015](./adr/0015-salience-is-a-legible-projection.md) | Salience is a legible projection; v0 ships crude |
 | [0016](./adr/0016-local-inference-is-the-default.md) | Local inference is the default; cloud is opt-in and configurable per port |
 | [0017](./adr/0017-pinned-runtime-toolchain-and-sidecar-spawn.md) | Pinned Rust and Tauri versions; `cpal`/`hound` for audio; the sidecar spawn seam |
+| [0018](./adr/0018-voice-ingestion-is-one-call.md) | Voice ingestion is one sidecar call; the host supplies recording-start time |
 
 ## Before the first line of code
 

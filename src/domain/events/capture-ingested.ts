@@ -23,7 +23,14 @@ export interface CaptureIngestedPayload {
   readonly text: string;
   /** When the input arrived, ISO 8601, distinct from when it was recorded. */
   readonly sourceTimestamp: string;
-  /** hash(source, sourceTimestamp, contentHash) — the idempotency key (`runtime.md` §3). */
+  /**
+   * sha256_hex of the raw text, before normalisation — 64 lowercase hex
+   * characters, no algorithm prefix (`runtime.md` §3).
+   *
+   * An *input* to `capture_id` rather than the idempotency key itself: the key
+   * is `captureId`, which hashes this together with `source` and
+   * `sourceTimestamp`.
+   */
   readonly contentHash: string;
 }
 
