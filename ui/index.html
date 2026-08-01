@@ -61,6 +61,19 @@
 
       // Refocus on every show, since the window is hidden rather than closed.
       window.addEventListener("focus", () => field.focus());
+
+      // The latency measurement asks for a frame and the page answers when the
+      // browser has actually painted one. `requestAnimationFrame` fires before
+      // a paint, so the reply goes in a nested call: the inner one runs after
+      // the frame the outer one scheduled has gone to the compositor. Without
+      // the nesting this would report intent to paint rather than a paint.
+      // Inert unless `measure-latency` is driving, which is the only thing that
+      // emits the event.
+      window.__TAURI__?.event?.listen("measure", () => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => window.__TAURI__.event.emit("painted")),
+        );
+      });
     </script>
   </body>
 </html>

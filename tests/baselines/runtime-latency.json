@@ -1,11 +1,11 @@
 {
   "measurement": "hotkey-to-window",
-  "runs": 200,
-  "first_open_ms": 0.966583,
-  "median_ms": 0.003709,
-  "p95_ms": 0.003917,
+  "what_is_timed": "Real global shortcut handler firing to the WebView reporting a painted frame via requestAnimationFrame. One warm-up press is discarded so the figures describe opening the window, not launching the application.",
+  "runs": 30,
+  "median_ms": 30.369667,
+  "p95_ms": 50.953375,
   "bar_ms": 200,
   "machine": "aarch64",
-  "os": "macos unix",
-  "note": "capture_window::show against Tauri's mock runtime; compositor paint and real WebView construction are not included."
+  "os": "macos",
+  "excluded": "The interval between the physical keypress and the OS delivering it to the handler, which Otto cannot observe or affect."
 }

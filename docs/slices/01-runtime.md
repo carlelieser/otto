@@ -85,6 +85,12 @@ Which is also what makes step 6 a real test rather than a tautology. Because the
 - **An orphaned temporary file is swept on restart.** Write one, kill the sidecar before it reads, restart, assert it is gone.
 - **Hotkey-to-window latency is under 200 ms**, asserted, with the measured median and p95 recorded. Not a Capture round trip — there is nothing to store — but the window has to be on screen before the user can type into it, which makes this the only part of PRD §4's first principle that is measurable this early.
 
+**"On screen" has to mean on screen.** The measurement runs the real application: the global shortcut registered with the OS, keypresses delivered through it, a real WebView, and the clock stopped when the page reports a painted frame rather than when a function returns. This is a separate binary (`src-tauri/src/bin/measure_latency.rs`) rather than a test, because it needs a windowing session and an event loop that `cargo test` cannot provide.
+
+The tempting shortcut is to time the host's `show` call against Tauri's mock runtime, which runs anywhere and needs no display. It was tried and it is worthless for this bar: the mock builds no WebView, its `show` is a no-op, and its `is_visible` is hardcoded to true, so the number it produces describes the host's bookkeeping while excluding every expensive thing between the keypress and the window. A latency bar whose measurement omits the WebView and the compositor is not measuring latency. What the mock can attest to — that the window is built once and reused — stays a test; the timing does not.
+
+Dropped presses fail the run rather than being averaged out. A press that produced no frame is one the OS never delivered, and a percentile over whichever presses happened to land is a number that looks like a measurement without being one.
+
 **The 200 ms bar, and why the baseline matters more.** 200 ms is the point where an opening window stops reading as a response to the keypress and starts reading as a wait; PRD §4 asks for capture that "costs nothing", and nothing here is a keystroke and a caret. It is a generous ceiling on purpose — an empty window with no I/O behind it should land far under, and if it does not, something is wrong with the process model rather than with the budget.
 
 Which is why the assertion alone is not the deliverable. `qa.md` §8 makes the point directly: every bar in the performance suite passes by 20× or better, so a bar alone will not catch a regression until it is catastrophic. Record the median and p95 to `tests/baselines/runtime-latency.json` alongside the machine and OS, the same shape Slice 2 uses for `capture-latency.json` — the 200 ms bar catches a collapse, and the baseline catches the drift that gets you there. Like Slice 2's latency test, this one is tagged out of the default `npm test`: a shared runner's timing is noise, and a flaky red build gets deleted rather than fixed.
@@ -95,5 +101,5 @@ Which is why the assertion alone is not the deliverable. `qa.md` §8 makes the p
 - The hotkey opens a capture window with the tray closed.
 - Killing the sidecar restarts it; killing it repeatedly backs off; the host survives both.
 - Audio recorded by the host is read by the sidecar, which deletes it after a successful read; orphans left by a crash are swept on restart.
-- Hotkey-to-window latency is under 200 ms, with median and p95 committed to `tests/baselines/runtime-latency.json`.
+- Hotkey-to-window latency is under 200 ms — measured through the real hotkey to a painted frame, not through a mock — with median and p95 committed to `tests/baselines/runtime-latency.json`.
 - The Rust toolchain, Tauri major version, audio crate, and sidecar spawn path are pinned and recorded in `stack.md` §8.

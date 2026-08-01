@@ -17,6 +17,17 @@ publish = false
 name = "otto_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "otto"
+path = "src/main.rs"
+
+# The real hotkey-to-window measurement. A separate binary rather than a test
+# because it needs a windowing session and a running event loop, which
+# `cargo test` cannot give it. See its module docs.
+[[bin]]
+name = "measure-latency"
+path = "src/bin/measure_latency.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
