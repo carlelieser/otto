@@ -1,0 +1,21 @@
+{
+  // The sidecar is the one part of `src/` that is executed rather than
+  // imported, so it is the one part that needs emitting. The root tsconfig
+  // stays `noEmit` because everything else is type-checked and run through
+  // Vitest's transform.
+  //
+  // `tsc` rather than a bundler: the sidecar imports nothing outside `src/` and
+  // nothing from npm, so bundling would buy a build-tool decision Slice 11 is
+  // better placed to make.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": ["src/interfaces/sidecar"]
+}

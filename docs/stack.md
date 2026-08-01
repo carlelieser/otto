@@ -18,10 +18,13 @@ Two properties explain most of the choices below:
 
 | Layer | Choice | Owned by |
 |---|---|---|
-| Application shell | Tauri — Rust host process | ADD §4, ADR-0013 |
+| Application shell | Tauri 2 — Rust host process | ADD §4, ADR-0013, ADR-0017 |
+| Rust toolchain | 1.97.1, pinned in `rust-toolchain.toml` | ADR-0017 |
 | UI | Svelte, in the WebView | ADD §3, §4 |
 | Pipeline runtime | Node sidecar, TypeScript | ADR-0013, `runtime.md` §1 |
 | Host ↔ sidecar transport | JSON-RPC over stdio | ADR-0013, `runtime.md` §1 |
+| Audio capture | `cpal` — default input device, all three platforms | ADR-0017, `runtime.md` §2 |
+| WAV encoding | `hound` — 16 kHz mono 16-bit, what whisper accepts | ADR-0017, `runtime.md` §2 |
 | Database | SQLite, WAL mode | ADR-0005, ADR-0013 |
 | SQLite driver | `better-sqlite3` — loads binary extensions | §8, `runtime.md` §4.3 |
 | Test runner | Vitest | §8, `qa.md` §12 |
@@ -126,6 +129,9 @@ The floor Otto must clear to claim local support is that **the local path produc
 - ~~**Test framework and runner.**~~ **Decided in Slice 0: Vitest, with `fast-check` for property-based tests.** `qa.md` §12 step 3 makes the Tier 1 pure tests unstartable without a runner, so the decision belonged with the foundation. Vitest carries its own assertion library, so no third choice is needed.
 - ~~**The SQLite driver.**~~ **Decided in Slice 0: `better-sqlite3`** — the driver the spike used, and confirmed to expose `loadExtension`, which `runtime.md` §4.3 requires for the vector extension in Slice 4. Its synchronous API also suits a sidecar that serialises the pipeline to one Capture at a time (ADD §4).
 - **SQLite-Vector's licence**, which GitHub does not report as a recognised SPDX identifier. Worth confirming before it is bundled into a distributed installer.
-- **Build and packaging pipeline.** How the sidecar, `whisper.cpp`, the embedding model, and the vector extension are bundled into a Tauri installer per platform. Slice 1 introduces `src-tauri/` and pins the Rust toolchain, the Tauri major version, and the audio-capture crate; Slice 2 settles that the sidecar reaches `whisper.cpp` by invoking the `whisper-cli` binary rather than through a native Node binding, which keeps the bundling question to "ship a binary and a model file." The installer, signing, and per-platform bundling stay open until Slice 11.
-- **Svelte version and UI dependencies.** ADD §3 names Svelte; nothing specifies a version, router, or component approach.
-- **How the sidecar's Node runtime ships** alongside the Tauri binary. Slice 1 takes the development answer only — the host spawns an installed Node through a configurable interpreter path — so that Slice 11 substitutes a bundled runtime rather than rewriting the supervisor.
+- ~~**The Rust toolchain version.**~~ **Decided in Slice 1: 1.97.1** (ADR-0017), pinned in `rust-toolchain.toml` so CI and every developer agree. The exact stable release rather than `stable` — an unpinned toolchain means a Rust release can break the build on a day nobody touched the code.
+- ~~**The Tauri major version.**~~ **Decided in Slice 1: Tauri 2** (`tauri` 2.11.5, ADR-0017). A one-way door in practice — the plugin ecosystem, the JS API, and the config format all differ across majors, so moving later is a rewrite of the host rather than a version bump.
+- ~~**The audio-capture crate.**~~ **Decided in Slice 1: `cpal` 0.18 for capture, `hound` 3.5 for the WAV** (ADR-0017). `cpal` records from the default input device on all three platforms; `hound` writes the 16 kHz mono 16-bit file `whisper.cpp` accepts in Slice 2. Nothing more — no mixing, no device selection UI, no format conversion beyond what whisper requires.
+- **Build and packaging pipeline.** How the sidecar, `whisper.cpp`, the embedding model, and the vector extension are bundled into a Tauri installer per platform. Slice 1 has introduced `src-tauri/` and pinned the rows above; Slice 2 settles that the sidecar reaches `whisper.cpp` by invoking the `whisper-cli` binary rather than through a native Node binding, which keeps the bundling question to "ship a binary and a model file." The installer, signing, and per-platform bundling stay open until Slice 11.
+- **Svelte version and UI dependencies.** ADD §3 names Svelte; nothing specifies a version, router, or component approach. Slice 1's capture window is deliberately plain HTML — one input and no build step — so that this decision is made in Slice 11 against a dashboard that has something to answer to, rather than settled early by a window with one field in it.
+- **How the sidecar's Node runtime ships** alongside the Tauri binary. Slice 1 takes the development answer only: the host spawns an installed Node, located through `OTTO_NODE`, running the script at `OTTO_SIDECAR`. Both are read in one function in the supervisor, which is what lets Slice 11 substitute a bundled runtime rather than rewriting it.

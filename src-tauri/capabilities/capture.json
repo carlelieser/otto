@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "What the capture window is allowed to call. Two commands and nothing else: the window accepts text and closes, and it stores nothing until Slice 2.",
+  "windows": ["capture"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "core:event:allow-listen",
+    "core:event:allow-emit"
+  ]
+}

@@ -1,0 +1,5 @@
+# 100 columns, matching `.prettierrc.json` on the TypeScript side. One line
+# width across both languages means a file does not read differently depending
+# on which half of the repository it is in.
+max_width = 100
+use_small_heuristics = "Max"

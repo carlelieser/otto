@@ -1,0 +1,6 @@
+# Pinned to the exact stable release rather than `stable`, per Slice 1: an
+# unpinned toolchain means a Rust release can break the build on a day nobody
+# touched the code. CI reads this file, so CI and every developer agree.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
