@@ -136,7 +136,7 @@ The smallest thing that closes the loop: capture → knowledge base → surfaced
 - Dashboard: sidebar navigation, list views with search/sort/filter, entity detail views with relations
 - Provenance visible — every fact traceable to its note
 - Daily and weekly briefs
-- Local inference supported
+- Local inference by default; cloud providers configurable per port, and never required (ADR-0016)
 
 ### 7.2 Deliberately after MVP
 

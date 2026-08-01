@@ -27,9 +27,8 @@ Two properties explain most of the choices below, and are worth holding while re
 | Vector index | SQLite-Vector 1.0 (`sqliteai/sqlite-vector`), loadable extension | `runtime.md` §4.3 |
 | Full-text search | SQLite FTS | `runtime.md` §4 |
 | Transcription | `whisper.cpp`, `small.en`, bundled | ADR-0013, `runtime.md` §2 |
-| Extraction / adjudication — default | Claude (Sonnet tier) | ADR-0013, `runtime.md` §2 |
-| Extraction / adjudication — alternative | OpenAI | ADR-0008, `runtime.md` §2 |
-| Extraction / adjudication — local | Qwen-class 7–8B instruct, GBNF-constrained, via LMStudio or Ollama | ADR-0013, `runtime.md` §2 |
+| Extraction / adjudication — default | Qwen-class 7–8B instruct, GBNF-constrained, via LMStudio or Ollama | ADR-0016, `runtime.md` §2 |
+| Extraction / adjudication — opt-in | Claude (Sonnet tier), OpenAI | ADR-0016, ADR-0008, `runtime.md` §2 |
 | Embeddings | `bge-small-en-v1.5` or equivalent, local always | ADR-0013, `runtime.md` §2 |
 
 ## 3. Process model
@@ -86,13 +85,15 @@ Ports are named after tasks, never after vendors (ADR-0008). `Extractor`, `Adjud
 
 The metric is proper-noun recall rather than general word error rate: a mis-transcribed name is a resolution failure. Entity names from the projection are supplied to the transcriber as an initial prompt to improve it, and transcripts stay user-correctable (`runtime.md` §5).
 
-### Extraction and adjudication — cloud default, local supported
+### Extraction and adjudication — local default, cloud opt-in
 
 | Path | Model | Notes |
 |---|---|---|
-| Default | Claude (Sonnet tier) | Best structured-output reliability; the bar the eval set is measured against |
-| Alternative | OpenAI | Second adapter, same ports |
-| Local | Qwen-class 7–8B instruct, GBNF-constrained, via LMStudio or Ollama | The floor, not the target |
+| Default | Qwen-class 7–8B instruct, GBNF-constrained, via LMStudio or Ollama | What Otto runs with nothing configured (ADR-0016) |
+| Opt-in | Claude (Sonnet tier) | Best structured-output reliability; the quality ceiling |
+| Opt-in | OpenAI | Second adapter, same ports |
+
+Otto is fully functional with no provider configured, and cloud is chosen per port rather than globally. This is the reverse of ADR-0013 as originally written; ADR-0016 has the reasoning.
 
 Per-adapter differences are confined to *how* structured output is requested — tool use, JSON mode, or grammar constraints — over a shared prompt template in `infrastructure/llm/shared/` (ADR-0008).
 

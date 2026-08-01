@@ -33,16 +33,17 @@ All decisions needed to begin implementation are settled. Nothing in this set co
 | [0010](./adr/0010-entities-carry-fields-assertions-reversed.md) | Entities carry fields; ADR-0004 is reversed |
 | [0011](./adr/0011-mechanics-of-an-immutable-log.md) | Snapshots, upcasts, staleness, idempotency |
 | [0012](./adr/0012-thresholds-bootstrap-and-minimal-merge.md) | Confidence combination, bootstrap, minimal merge in MVP |
-| [0013](./adr/0013-node-sidecar-and-named-local-models.md) | Node sidecar; named local models; the SQLite spike (run — passed) |
+| [0013](./adr/0013-node-sidecar-and-named-local-models.md) | Node sidecar; named local models; the SQLite spike (run — passed) — extraction default **amended by 0016** |
 | [0014](./adr/0014-typed-fields-closed-relations-visible-discards.md) | Closed field and relation vocabularies; discards stay visible |
 | [0015](./adr/0015-salience-is-a-legible-projection.md) | Salience is a legible projection; v0 ships crude |
+| [0016](./adr/0016-local-inference-is-the-default.md) | Local inference is the default; cloud is opt-in and configurable per port |
 
 ## Before the first line of code
 
 Two things ran first, in this order, because both can change the design:
 
 1. ~~**The SQLite spike**~~ ([`runtime.md`](./runtime.md) §4) — **done, passed on all seven bars.** The storage design is unchanged and schema work is unblocked. Results in [`runtime.md`](./runtime.md) §4; the harness was throwaway and is not kept.
-2. **Local extraction measurement** ([`runtime.md`](./runtime.md) §2) — whether a 7–8B model under grammar constraints clears the stated floor. Still to run, and now the assumption in Otto most likely to be wrong.
+2. **Local extraction measurement** ([`runtime.md`](./runtime.md) §2) — whether a 7–8B model under grammar constraints clears the stated floor. Still to run, and now the assumption in Otto most likely to be wrong. ADR-0016 raises its stakes: local is the default path, so this measures what every user gets rather than a fallback.
 
 After those, [`qa.md`](./qa.md) §12 has the build order.
 

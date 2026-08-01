@@ -1,8 +1,10 @@
 # The pipeline runs as a Node sidecar; local inference is named, budgeted, and gated by a spike
 
 ---
-Status: accepted
+Status: accepted, amended by ADR-0016
 ---
+
+> **Amended.** The extraction default below is reversed: local inference is the default and cloud is opt-in per port. See [ADR-0016](./0016-local-inference-is-the-default.md). Everything else here — the sidecar, the named models and budgets, local-always transcription and embeddings, and the spike — stands.
 
 ADR-0008 committed Otto to running fully locally, and PRD §4.6 made it a principle. Neither named a model or stated a budget, which leaves "degrades to local" as an aspiration rather than a requirement anything can be tested against. ADD §4 established three processes without saying how a TypeScript pipeline is hosted inside a Rust application. Both are settled in [`runtime.md`](../runtime.md).
 
