@@ -88,7 +88,7 @@ An ongoing effort the user is involved in, which may outlive the people associat
 
 ## 6. Relations
 
-A Relation is a named, directed, revisable link between two entities (`CONTEXT.md`). The vocabulary is **closed**, and that is a decision rather than an omission.
+A Relation is a named, directed, revisable link between two entities (`CONTEXT.md`). The vocabulary is **closed**, for the reason given below.
 
 ADR-0010 closed the predicate-vocabulary question for *fields*, but Relations reopen exactly the same problem at the edge level: an open set means Extraction invents relation names and the graph fragments into `works_on`, `working_on`, and `involved_with` meaning one thing. So the set is fixed, small, and typed by the pair of entity types it connects. Adding a relation name is a schema change — the same honest cost ADR-0010 accepted for fields.
 
@@ -124,7 +124,7 @@ The mechanism: the Capture's timestamp is provided to the extractor as context, 
 
 ## 9. What this schema deliberately cannot express
 
-Stated so that the absences are decisions rather than oversights.
+These are decisions, not oversights.
 
 - **Contradiction.** Two live values for one `single` field. ADR-0010 chose supersession; the hybrid escape hatch it names is where to go if this ever becomes necessary.
 - **Bitemporality.** Fields have no independent valid-time. "Sarah worked at Acme until March" is `employer: Globex` now, with Acme recoverable from the log, not a closed interval on live data (ADR-0010).

@@ -172,8 +172,6 @@ Full rebuild is 215 ms at the specified corpus and 15 s at 25× it — one milli
 
 ### 4.2 What the spike does not settle
 
-Stated because a spike that overclaims is worse than none.
-
 - **Embeddings are synthetic.** The spike measures the index, not retrieval quality. Whether candidate generation actually retrieves the right entities is an eval-set question (`qa.md` §6).
 - **It is single-process.** The sidecar's real concurrency — the UI reading projections while the projection worker writes — is untested. WAL is built for that shape and ADD §4 serialises the pipeline, so the risk is low, but it remains an assumption.
 - **Warm cache, SSD, M1 Max.** The numbers are a ceiling rather than a floor. The margins are wide enough that this does not change the verdict.

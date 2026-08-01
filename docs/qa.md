@@ -28,8 +28,6 @@ The rest of this document is organised by tier, not by module, because that is t
 
 ## 2. What is deliberately not tested
 
-Stated up front so the absences are decisions rather than gaps.
-
 **Throughput, concurrency, and load.** ADD §1 makes scale an explicit non-goal, and ADD §4 serialises the pipeline to one Capture at a time. There is exactly one writer by construction (`runtime.md` §1). Writing concurrency tests for a system whose design eliminated concurrency would be testing a hypothetical. The one exception is §5.6's staleness handling, which exists because of *user think-time*, not parallelism, and is tested as such.
 
 **Database swappability.** ADR-0001 is explicit that the layering buys testability, not swappability. No test will exercise a second database adapter, because there will not be one.
@@ -204,7 +202,7 @@ ADD §5.6 and `triage.md` §8. Optimistic concurrency on the Proposal's aggregat
 
 Extraction and adjudication cannot be asserted on. They are measured against a fixed corpus, and the corpus is the instrument.
 
-**The eval set is the gate** (ADR-0006, `runtime.md` §2). Its structure follows from ADR-0006's insight that a Correction records the counterfactual: each correction is an input/correct-output pair, and ~50 makes a regression suite rather than an anecdote.
+**The eval set is the gate** (ADR-0006, `runtime.md` §2). Its structure follows from ADR-0006's insight that a Correction records the counterfactual: each correction is an input/correct-output pair, and ADR-0006 sets ~50 as the minimum for a regression suite.
 
 ### 6.1 What the eval set measures
 
@@ -361,7 +359,7 @@ Between pass and fail is the band where the design holds but needs attention. Tr
 
 Two notes carried from `runtime.md` §4: **vector search was the predicted failure and was not** — it passes by 330×, and the separate-index fallback is not being built, though it stays cheap to reach for because embeddings are derived state. **If several bars fail together, the answer is not a different database** — it is that the projection model is doing too much work per event, which is a design finding rather than a test failure. That remains the most likely way this suite goes red, since the real projector does more per event than the spike's did.
 
-Additionally, the capture-latency budget is a product requirement, not a nice-to-have: PRD §4.1 makes cheap capture the first principle, and ADD §4 requires the UI never run pipeline work. Test that **capture round-trip stays responsive while the pipeline is saturated** — a long extraction against a local model must not make the capture window stutter. This is the test that guards the entire process-model decision in `runtime.md` §1.
+The capture-latency budget is a product requirement, not a nice-to-have: PRD §4.1 makes cheap capture the first principle, and ADD §4 requires the UI never run pipeline work. Test that **capture round-trip stays responsive while the pipeline is saturated** — a long extraction against a local model must not make the capture window stutter. This is the test that guards the entire process-model decision in `runtime.md` §1.
 
 ## 9. Failure and degradation
 
@@ -391,8 +389,6 @@ Deliberately the thinnest section. The UI is where bugs are most visible and lea
 
 ## 11. What blocks parts of this plan
 
-Honest about what cannot be written yet.
-
 **Salience v0 is testable, but only as arithmetic.** The selection rules now exist (`salience.md`, ADR-0015): a sum of five named terms, each with stated coefficients. That makes the score exactly assertable — given a fixture entity with a known mention date, status, and due date, the score is a number, and each term can be tested in isolation. Brief composition is likewise assertable at the selection stage: given a fixture knowledge base, which entities land in which section, and that caps hold and empty sections are omitted.
 
 What remains untestable is whether the rules are *right*, which is a product question no test can answer and which `salience.md` §5 addresses with instrumentation instead. So §10's brief tests stay smoke-level for the generated prose — a brief generates, is non-empty, contains no entity that was not selected (ADD §8) — while the selection beneath it gets ordinary Tier 1 treatment.
@@ -412,7 +408,7 @@ The order matters because some of these are prerequisites for the others being m
 3. **Tier 1 pure tests** (§5). Pure functions, no fixtures, writable before any infrastructure exists. Highest value per unit of effort in the entire plan.
 4. **In-memory adapters and pipeline integration** (§4.3, §7.2). ADR-0001 says this is what the layering is buying; it should be built early enough to actually collect on that.
 5. **Tier 0 property tests** (§4). As soon as the event store and executor exist.
-6. **Eval set** (§6). Needs ~50 corrections to be a regression suite rather than an anecdote, which means it starts as a hand-built corpus and grows from real corrections. Start hand-built; do not wait for organic data.
+6. **Eval set** (§6). Needs ~50 corrections to function as a regression suite, which means it starts as a hand-built corpus and grows from real corrections. Start hand-built; do not wait for organic data.
 7. **Projection and rebuild property tests** (§7.1). As soon as projections exist.
 8. **Performance suite** (§8). Standing, from the point real SQLite is in play.
 9. **UI smoke and the two E2E paths** (§10). Last, and kept small.
