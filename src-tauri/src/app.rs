@@ -25,11 +25,7 @@ pub struct SidecarState(pub Mutex<Supervisor>);
 pub fn run() {
     tauri::Builder::default()
         .plugin(global_shortcut_plugin())
-        .invoke_handler(tauri::generate_handler![
-            ping_sidecar,
-            capture_text,
-            close_capture_window
-        ])
+        .invoke_handler(tauri::generate_handler![ping_sidecar, capture_text, close_capture_window])
         .setup(|app| {
             let handle = app.handle();
             app.manage(SidecarState(Mutex::new(start_sidecar(handle)?)));
