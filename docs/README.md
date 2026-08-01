@@ -14,6 +14,7 @@ All decisions needed to begin implementation are settled. Nothing in this set co
 | [`runtime.md`](./runtime.md) | Process model, local models with budgets, the SQLite spike and its results, transcript correction. |
 | [`salience.md`](./salience.md) | What gets surfaced and what goes in a brief. v0, expected to be replaced. |
 | [`qa.md`](./qa.md) | What to test, at what rigour, and in what order. |
+| [`stack.md`](./stack.md) | Every technology choice in one place. Derivative — a summary of the above, not a source. |
 | [`adr/`](./adr/) | Why each decision went the way it did, including the one that was reversed. |
 | [`../spikes/sqlite/`](../spikes/sqlite/) | The storage spike: harness, results, and the standing performance suite. |
 
