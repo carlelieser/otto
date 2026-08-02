@@ -1,3 +1,4 @@
+import { renderSections } from "../../inference/salience/brief-selection.js";
 import type { BriefGenerator, BriefRequest, GeneratedBrief } from "../../ports/brief-generator.js";
 
 /**
@@ -28,21 +29,11 @@ export class InMemoryBriefGenerator implements BriefGenerator {
 
   async generate(request: BriefRequest): Promise<GeneratedBrief> {
     return {
-      prose: this.#canned ?? summarise(request),
+      prose: this.#canned ?? renderSections(request.sections),
       provider: this.#provider,
       modelVersion: this.#modelVersion,
     };
   }
-}
-
-/** Each section as a heading and its entities, which is all the stub claims to do. */
-function summarise(request: BriefRequest): string {
-  return request.sections
-    .map((section) => {
-      const names = section.entities.map((entity) => `- ${entity.name}`);
-      return [`## ${section.heading}`, ...names].join("\n");
-    })
-    .join("\n\n");
 }
 
 export interface InMemoryBriefGeneratorOptions {

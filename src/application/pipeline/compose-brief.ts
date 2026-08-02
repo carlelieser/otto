@@ -1,6 +1,6 @@
 import {
   isQuiet,
-  selectedIds,
+  renderSections,
   type BriefSelection,
 } from "../../inference/salience/brief-selection.js";
 import type { BriefGenerator } from "../../ports/brief-generator.js";
@@ -87,16 +87,19 @@ export async function composeBrief(
  */
 function unselectedMentions(prose: string, selection: BriefSelection): readonly string[] {
   const permitted = permittedNames(selection);
-  return [...new Set(properNamesIn(prose))].filter((name) => !permitted.has(name.toLowerCase()));
+  return [...new Set(properNameRunsIn(prose))].filter((run) => !permitted.has(run.toLowerCase()));
 }
 
 /**
- * Every name the prose may use: the selected entities', plus each word of them.
+ * Every name the prose may use: each selected name whole, and each single word
+ * of it.
  *
- * The word-level entries are what let "Sarah Chen" be referred to as "Sarah"
- * without tripping the check. It loosens the constraint deliberately — the
- * alternative refuses ordinary prose that uses a first name on second mention,
- * which would make the check fire constantly and be turned off.
+ * The single-word entries are what let "Sarah Chen" be called "Sarah" on second
+ * mention. They are deliberately *only* single words: permitting every word
+ * individually and then testing the prose word-by-word would accept "Chen
+ * Project" from a selection of "Sarah Chen" and "Acme Project" — an entity
+ * nobody selected, assembled from parts of two who were. Runs of two or more
+ * capitalised words are therefore matched whole, against whole names.
  */
 function permittedNames(selection: BriefSelection): ReadonlySet<string> {
   const permitted = new Set<string>();
@@ -110,18 +113,25 @@ function permittedNames(selection: BriefSelection): ReadonlySet<string> {
 }
 
 /**
- * Capitalised words in the prose that are not sentence-initial.
+ * Runs of adjacent capitalised words in the prose that are not
+ * sentence-initial, each run kept whole.
  *
- * A blunt instrument, and knowingly so: it cannot tell a person's name from a
- * capitalised noun, so the check errs toward flagging. `IGNORED_WORDS` carries
- * the words that would otherwise fire constantly — a brief cannot be written
- * without weekdays and months.
+ * Whole runs rather than single words, so a two-word name is checked as a
+ * two-word name. A blunt instrument otherwise, and knowingly so: it cannot tell
+ * a person's name from a capitalised noun, so the check errs toward flagging.
+ * `IGNORED_WORDS` carries the words that would otherwise fire constantly — a
+ * brief cannot be written without weekdays and months.
  */
-function properNamesIn(prose: string): readonly string[] {
+function properNameRunsIn(prose: string): readonly string[] {
   const withoutSentenceStarts = prose.replace(/(^|[.!?:\n]\s*)([A-Z])/g, (_, lead: string) => lead);
-  return [...withoutSentenceStarts.matchAll(/\b[A-Z][a-z]{2,}\b/g)]
+  return [...withoutSentenceStarts.matchAll(/\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b/g)]
     .map((match) => match[0])
-    .filter((word) => !IGNORED_WORDS.has(word.toLowerCase()));
+    .filter((run) => !isIgnorable(run));
+}
+
+/** Whether every word of a run is one that ordinary prose capitalises anyway. */
+function isIgnorable(run: string): boolean {
+  return run.split(/\s+/).every((word) => IGNORED_WORDS.has(word.toLowerCase()));
 }
 
 /** Capitalised words that appear in ordinary prose and name no entity. */
@@ -170,10 +180,5 @@ function quietBrief(selection: BriefSelection): ComposedBrief {
  * strictly what was selected, so it cannot fail the check that produced it.
  */
 function renderPlainly(selection: BriefSelection): string {
-  return selection.sections
-    .map((section) => {
-      const lines = section.entities.map((entity) => `- ${entity.name}`);
-      return [`## ${section.heading}`, ...lines].join("\n");
-    })
-    .join("\n\n");
+  return renderSections(selection.sections);
 }

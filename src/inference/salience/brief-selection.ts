@@ -85,3 +85,23 @@ export function sectionOf(
   const capped = entities.slice(0, cap);
   return capped.length === 0 ? [] : [{ heading, entities: capped }];
 }
+
+/**
+ * The sections as plain Markdown: a heading and a list of names.
+ *
+ * Shared by the two places that render a selection without a model — the
+ * fallback when generated prose is refused, and the in-memory generator. They
+ * are the same rendering of the same shape, and two copies would be two things
+ * that must agree about what a brief looks like with no model behind it.
+ *
+ * It names only selected entities, so output from here cannot fail the
+ * no-new-entities check that the fallback exists to satisfy.
+ */
+export function renderSections(sections: readonly BriefSection[]): string {
+  return sections
+    .map((section) => {
+      const names = section.entities.map((entity) => `- ${entity.name}`);
+      return [`## ${section.heading}`, ...names].join("\n");
+    })
+    .join("\n\n");
+}

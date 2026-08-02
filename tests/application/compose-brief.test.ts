@@ -91,6 +91,28 @@ describe("the generator cannot introduce unselected entities", () => {
     expect(brief.unselectedMentions).toEqual([]);
   });
 
+  /**
+   * The hole a word-by-word check leaves: two selected names supply the words
+   * for a third nobody selected. Runs are matched whole against whole names.
+   */
+  it("refuses a name assembled from words of two selected names", async () => {
+    const selection = selectionWith("Sarah Chen", "Acme Project");
+    const generated = generator("A decision is due on Chen Project this week.");
+
+    const brief = await composeBrief(selection, generated);
+
+    expect(brief.unselectedMentions).toContain("Chen Project");
+  });
+
+  it("still accepts a selected name used whole", async () => {
+    const selection = selectionWith("Sarah Chen", "Acme Project");
+    const generated = generator("Acme Project is waiting on Sarah Chen.");
+
+    const brief = await composeBrief(selection, generated);
+
+    expect(brief.unselectedMentions).toEqual([]);
+  });
+
   it("does not flag weekdays and months", async () => {
     const generated = generator("Draft the report is due Tuesday, ahead of the August deadline.");
 
