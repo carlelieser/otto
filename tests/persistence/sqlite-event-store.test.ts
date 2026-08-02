@@ -56,6 +56,23 @@ describe("SQLite refuses mutation at the database level", () => {
        '2026-08-01T09:00:00Z')`;
 
   /**
+   * Every column on `captures` except `corrected_text`, with a value that
+   * differs from the seed so the UPDATE is a real change.
+   *
+   * Named rather than inlined because two tests read it: one asserting these
+   * are still refused, and one asserting the list is the whole table.
+   */
+  const PROTECTED_COLUMNS: readonly [string, string][] = [
+    ["capture_id", `'cap-other'`],
+    ["source", `'voice'`],
+    ["raw_text", `'tampered'`],
+    ["transcription_model", `'large-v3'`],
+    ["source_timestamp", `'2020-01-01T00:00:00.000Z'`],
+    ["content_hash", `'0000'`],
+    ["ingested_at", `'2020-01-01T00:00:00.000Z'`],
+  ];
+
+  /**
    * Built through `openDatabase` rather than from `CREATE_SCHEMA` alone.
    *
    * The schema declares the triggers; the connection is what makes them fire on
@@ -157,23 +174,40 @@ describe("SQLite refuses mutation at the database level", () => {
       );
     });
 
+    /**
+     * The guard names columns explicitly, so a column added to `captures`
+     * without being named there is one a correction statement could write
+     * alongside the corrected text (ADR-0026).
+     *
+     * This asserts the list below is the whole table rather than a sample of
+     * it, which is what makes the cases underneath exhaustive instead of
+     * illustrative.
+     */
+    it("covers every column the table has", () => {
+      const seeded = seededDatabase();
+      const columns = (seeded.pragma("table_info(captures)") as { name: string }[]).map(
+        (column) => column.name,
+      );
+
+      expect(columns.sort()).toEqual(
+        [...PROTECTED_COLUMNS.map(([column]) => column), "corrected_text"].sort(),
+      );
+    });
+
     // The exception is for one column. Every other column on the table is
     // still what it was when the Capture was written — including the two the
     // id derivation depends on, where a permitted write would re-key the corpus.
-    it.each([
-      ["raw_text", `'tampered'`],
-      ["capture_id", `'cap-other'`],
-      ["source", `'voice'`],
-      ["content_hash", `'0000'`],
-      ["source_timestamp", `'2020-01-01T00:00:00.000Z'`],
-      ["transcription_model", `'large-v3'`],
-      ["ingested_at", `'2020-01-01T00:00:00.000Z'`],
-    ])("still refuses an UPDATE to %s alongside a correction", (column, value) => {
-      const seeded = seededDatabase();
-      expect(() =>
-        seeded.prepare(`UPDATE captures SET corrected_text = 'fixed', ${column} = ${value}`).run(),
-      ).toThrow(/append-only/);
-    });
+    it.each(PROTECTED_COLUMNS)(
+      "still refuses an UPDATE to %s alongside a correction",
+      (column, value) => {
+        const seeded = seededDatabase();
+        expect(() =>
+          seeded
+            .prepare(`UPDATE captures SET corrected_text = 'fixed', ${column} = ${value}`)
+            .run(),
+        ).toThrow(/append-only/);
+      },
+    );
   });
 
   it("leaves the row untouched after a refused UPDATE", () => {
