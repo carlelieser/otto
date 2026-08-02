@@ -1,3 +1,7 @@
+import {
+  CAPTURE_TRANSCRIPT_CORRECTED,
+  CAPTURE_TRANSCRIPT_CORRECTED_VERSION,
+} from "./capture-corrected.js";
 import { CAPTURE_INGESTED, CAPTURE_INGESTED_VERSION } from "./capture-ingested.js";
 import { KNOWLEDGE_EVENT_TYPES, KNOWLEDGE_EVENT_VERSION } from "./knowledge-events.js";
 import { identityUpcast, UpcastRegistry, type UpcastEntry } from "./upcast-registry.js";
@@ -14,6 +18,7 @@ import { identityUpcast, UpcastRegistry, type UpcastEntry } from "./upcast-regis
  */
 export const UPCASTS: readonly UpcastEntry[] = [
   { type: CAPTURE_INGESTED, fromVersion: 1, upcast: identityUpcast },
+  { type: CAPTURE_TRANSCRIPT_CORRECTED, fromVersion: 1, upcast: identityUpcast },
   ...KNOWLEDGE_EVENT_TYPES.map((type) => ({
     type,
     fromVersion: KNOWLEDGE_EVENT_VERSION,
@@ -24,6 +29,7 @@ export const UPCASTS: readonly UpcastEntry[] = [
 /** The version each event type's payload is currently written at. */
 export const CURRENT_VERSIONS: ReadonlyMap<string, number> = new Map([
   [CAPTURE_INGESTED, CAPTURE_INGESTED_VERSION],
+  [CAPTURE_TRANSCRIPT_CORRECTED, CAPTURE_TRANSCRIPT_CORRECTED_VERSION],
   ...KNOWLEDGE_EVENT_TYPES.map((type) => [type, KNOWLEDGE_EVENT_VERSION] as const),
 ]);
 

@@ -119,6 +119,63 @@ describe("SQLite refuses mutation at the database level", () => {
     ).toThrow(/append-only/);
   });
 
+  /**
+   * The one write `captures` permits, and everything it still refuses.
+   *
+   * Slice 9 corrects a misheard transcript by writing `corrected_text`, which
+   * is an UPDATE against a table whose triggers refuse one. The trigger is
+   * narrowed to that single transition rather than dropped, so the immutability
+   * rule holds exactly where it held before — `qa.md` §7.6 asks that the
+   * original is never overwritten, and this is the level that enforces it.
+   */
+  describe("the correction exception on captures", () => {
+    it("permits corrected_text once, from null", () => {
+      const seeded = seededDatabase();
+      seeded.prepare(`UPDATE captures SET corrected_text = 'fixed'`).run();
+
+      const row = seeded.prepare(`SELECT corrected_text FROM captures`).get() as {
+        corrected_text: string;
+      };
+      expect(row.corrected_text).toBe("fixed");
+    });
+
+    it("refuses a second correction, so one is never silently replaced", () => {
+      const seeded = seededDatabase();
+      seeded.prepare(`UPDATE captures SET corrected_text = 'first'`).run();
+
+      expect(() => seeded.prepare(`UPDATE captures SET corrected_text = 'second'`).run()).toThrow(
+        /append-only/,
+      );
+    });
+
+    it("refuses clearing a correction back to null", () => {
+      const seeded = seededDatabase();
+      seeded.prepare(`UPDATE captures SET corrected_text = 'fixed'`).run();
+
+      expect(() => seeded.prepare(`UPDATE captures SET corrected_text = NULL`).run()).toThrow(
+        /append-only/,
+      );
+    });
+
+    // The exception is for one column. Every other column on the table is
+    // still what it was when the Capture was written — including the two the
+    // id derivation depends on, where a permitted write would re-key the corpus.
+    it.each([
+      ["raw_text", `'tampered'`],
+      ["capture_id", `'cap-other'`],
+      ["source", `'voice'`],
+      ["content_hash", `'0000'`],
+      ["source_timestamp", `'2020-01-01T00:00:00.000Z'`],
+      ["transcription_model", `'large-v3'`],
+      ["ingested_at", `'2020-01-01T00:00:00.000Z'`],
+    ])("still refuses an UPDATE to %s alongside a correction", (column, value) => {
+      const seeded = seededDatabase();
+      expect(() =>
+        seeded.prepare(`UPDATE captures SET corrected_text = 'fixed', ${column} = ${value}`).run(),
+      ).toThrow(/append-only/);
+    });
+  });
+
   it("leaves the row untouched after a refused UPDATE", () => {
     const seeded = seededDatabase();
     expect(() => seeded.prepare(`UPDATE events SET type = 'Tampered'`).run()).toThrow();

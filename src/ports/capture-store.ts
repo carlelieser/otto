@@ -32,6 +32,23 @@ export interface CaptureStore {
   get(captureId: string): Promise<Capture | null>;
 
   /**
+   * Materialises a correction's text against a stored Capture (Slice 9).
+   *
+   * **This is not an update, and the distinction is the whole slice.** The
+   * correction is `CaptureTranscriptCorrected` on the log; this writes the
+   * column that event implies, so extraction and the search index can read the
+   * corrected text without folding the log for it. `raw_text` and
+   * `content_hash` are untouched — the original is never overwritten
+   * (`runtime.md` §5), and every id derived from it stays stable.
+   *
+   * Naming it for what it records rather than `update` or `setCorrectedText` is
+   * deliberate: the store's surface says what may happen to a Capture, and
+   * "record what the log already says" is a different permission from "change
+   * this row to whatever you like."
+   */
+  recordCorrection(captureId: string, correctedText: string): Promise<Capture>;
+
+  /**
    * Captures with no `CaptureIngested` event, oldest first.
    *
    * The startup sweep's query. The row is written before the event (`add.md`

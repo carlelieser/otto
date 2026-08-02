@@ -16,6 +16,18 @@ ON CONFLICT (capture_id) DO NOTHING`;
 const SELECT_BY_CAPTURE_ID = `SELECT * FROM captures WHERE capture_id = ?`;
 
 /**
+ * The one UPDATE `captures` permits, narrowed here as well as in the trigger.
+ *
+ * `WHERE corrected_text IS NULL` makes a second correction affect no rows
+ * rather than reach the trigger and abort. The trigger is what *guarantees* the
+ * write-once rule (`qa.md` §4.1 wants the database to refuse, not the
+ * application to decline); this clause is what makes the ordinary path quiet.
+ */
+const RECORD_CORRECTION = `
+UPDATE captures SET corrected_text = @corrected_text
+WHERE capture_id = @capture_id AND corrected_text IS NULL`;
+
+/**
  * The startup sweep's anti-join.
  *
  * Filtered to `CaptureIngested` rather than to any event: a Capture with some
@@ -60,6 +72,26 @@ export class SqliteCaptureStore implements CaptureStore {
     const stored = await this.get(capture.captureId);
     if (stored === null) {
       throw new Error(`Capture ${capture.captureId} vanished immediately after being stored`);
+    }
+    return stored;
+  }
+
+  /**
+   * Writes the corrected text a `CaptureTranscriptCorrected` event implies.
+   *
+   * The row is read back rather than assumed, because the write is deliberately
+   * conditional: a Capture already carrying a correction is left as it stands,
+   * and the caller gets what is stored rather than what it tried to store. That
+   * is the same "no-op, not overwrite" contract `put` offers for a
+   * double-delivered Capture, applied to a double-submitted correction.
+   */
+  async recordCorrection(captureId: string, correctedText: string): Promise<Capture> {
+    this.#database
+      .prepare(RECORD_CORRECTION)
+      .run({ capture_id: captureId, corrected_text: correctedText });
+    const stored = await this.get(captureId);
+    if (stored === null) {
+      throw new Error(`Cannot record a correction for Capture ${captureId}: no such Capture`);
     }
     return stored;
   }
