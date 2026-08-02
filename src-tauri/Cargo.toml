@@ -6,6 +6,11 @@ edition = "2021"
 rust-version = "1.97.1"
 publish = false
 
+# `measure-latency` is a second binary, so `cargo run` has two candidates and
+# refuses to choose. The CLI runs `cargo run` with no `--bin`, which makes the
+# ambiguity a startup failure rather than a preference.
+default-run = "otto"
+
 # The host is a shell around OS APIs (Slice 1): tray, hotkey, capture window,
 # audio, and the sidecar's lifecycle. No domain types, no persistence, and no
 # knowledge of what a Capture means — `add.md` §3's layer rules govern `src/`,

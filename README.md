@@ -15,8 +15,12 @@ a WebView (`runtime.md` §1).
 ```sh
 npm ci
 npm run build:sidecar
-cargo tauri dev --manifest-path src-tauri/Cargo.toml
+cargo tauri dev
 ```
+
+Run it from the repository root: the Tauri CLI finds `src-tauri/tauri.conf.json`
+itself. `build:sidecar` has to come first — the host spawns the built script,
+and a missing one leaves the window opening and storing nothing.
 
 The global hotkey is <kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd>.
 
@@ -104,7 +108,7 @@ for the transcription corpus, which is hand-recorded.
 | --- | --- | --- |
 | `OTTO_DATABASE` | Where the sidecar's SQLite file lives | the app data directory |
 | `OTTO_NODE` | The Node interpreter the host spawns | `node` |
-| `OTTO_SIDECAR` | The built sidecar script | `dist/sidecar/main.js` |
+| `OTTO_SIDECAR` | The built sidecar script | `dist/interfaces/sidecar/main.js` |
 | `OTTO_WHISPER_BIN` | The `whisper-cli` executable | `whisper-cli` |
 | `OTTO_WHISPER_MODEL` | The `ggml-*.bin` model file | `models/ggml-small.en.bin` |
 | `OTTO_EXTRACTION_PROVIDER` | Which adapter satisfies the `Extractor` port | `local` |

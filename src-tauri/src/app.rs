@@ -9,7 +9,6 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
@@ -66,22 +65,30 @@ fn register_shortcut(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
+/// Attaches the menu to the tray icon the configuration already created.
+///
+/// The icon itself is `tauri.conf.json`'s, which names `icons/tray.png` and
+/// marks it a template so macOS tints it for a light or dark menu bar. Building
+/// one here instead would put a *second* icon in the tray — the configured one
+/// carrying no menu, and this one carrying the window icon, which is a
+/// full-colour square rather than a template.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let tray = app.tray_by_id("otto").expect("the tray icon declared in tauri.conf.json");
+    tray.set_menu(Some(tray_menu(app)?))?;
+    tray.on_menu_event(|app, event| match event.id.as_ref() {
+        "capture" => {
+            let _ = capture_window::show(app);
+        }
+        "quit" => app.exit(0),
+        _ => {}
+    });
+    Ok(())
+}
+
+fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let capture = MenuItem::with_id(app, "capture", "Capture", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Otto", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&capture, &quit])?;
-    TrayIconBuilder::with_id("otto")
-        .icon(app.default_window_icon().expect("bundled icon").clone())
-        .menu(&menu)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "capture" => {
-                let _ = capture_window::show(app);
-            }
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .build(app)?;
-    Ok(())
+    Menu::with_items(app, &[&capture, &quit])
 }
 
 /// Spawns the sidecar through a configurable interpreter path.
@@ -102,9 +109,26 @@ fn start_sidecar(app: &AppHandle) -> tauri::Result<Supervisor> {
 
 fn sidecar_config(recordings: PathBuf, database: PathBuf) -> SidecarConfig {
     let interpreter = std::env::var("OTTO_NODE").unwrap_or_else(|_| "node".into());
-    let script = std::env::var("OTTO_SIDECAR").unwrap_or_else(|_| "dist/sidecar/main.js".into());
-    SidecarConfig::new(interpreter.into(), script.into(), recordings)
+    SidecarConfig::new(interpreter.into(), sidecar_script(), recordings)
         .with_environment("OTTO_DATABASE", &database.to_string_lossy())
+}
+
+/// Where the built sidecar lives, absolute so it does not depend on the
+/// directory the host happened to be launched from.
+///
+/// The default is resolved against the manifest rather than the working
+/// directory: `cargo tauri dev` runs the binary from `src-tauri/`, so a
+/// relative path resolves one level below the `dist/` the build writes. A
+/// sidecar that fails to spawn is not a crash — the supervisor logs and the
+/// window still opens — so the wrong default costs every Capture silently,
+/// which is the failure `qa.md` §4.2 ranks worst.
+fn sidecar_script() -> PathBuf {
+    match std::env::var("OTTO_SIDECAR") {
+        Ok(configured) => configured.into(),
+        Err(_) => {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist/interfaces/sidecar/main.js")
+        }
+    }
 }
 
 /// The round-trip proof, reachable from the WebView.
