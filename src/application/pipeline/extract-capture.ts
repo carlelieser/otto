@@ -50,8 +50,33 @@ export class CaptureExtraction {
     const recorded = await this.#proposals.forCapture(capture.captureId);
     if (recorded.length > 0) return recorded;
 
+    return this.reextract(capture);
+  }
+
+  /**
+   * Extraction run **without** the resumption check (`runtime.md` §3, §5).
+   *
+   * The check `extract` makes is what keeps a restarted worker from re-billing
+   * a call, and it is exactly what a corrected transcript has to get past: the
+   * recorded Proposals came from the misheard text, so returning them would
+   * leave the correction with no effect. This is the only way past it, and the
+   * separate name is what makes reaching for it deliberate.
+   *
+   * Idempotency is not lost, only moved: the ids still derive from the Capture,
+   * the model, and the ordinal, so a re-run under the same model produces the
+   * same ids and the store no-ops. What this costs is the model call, which is
+   * the price of having been told the input was wrong.
+   *
+   * It returns **what this run produced** rather than what the Capture now
+   * holds. The two differ exactly when an id collided, and a caller triaging
+   * the result wants the claim the corrected text actually made — not the
+   * stored row a colliding id kept from being replaced.
+   */
+  async reextract(capture: Capture): Promise<readonly ExtractedProposal[]> {
     const extraction = await this.#extractor.extract(this.#requestFor(capture));
-    return this.#proposals.put(this.#asProposals(capture, extraction));
+    const produced = this.#asProposals(capture, extraction);
+    await this.#proposals.put(produced);
+    return produced;
   }
 
   /**

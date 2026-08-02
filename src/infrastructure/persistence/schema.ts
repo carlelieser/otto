@@ -5,6 +5,45 @@ const REFUSED_MUTATIONS = [
 ] as const;
 
 /**
+ * **The one write `captures` permits, and the shape of the hole it leaves.**
+ *
+ * Slice 9 corrects a misheard transcript, and `corrected_text` is the column
+ * that records it (`runtime.md` §5). The table refuses UPDATE, so this
+ * condition is what the UPDATE trigger fires *despite*: a single transition of
+ * `corrected_text` from `NULL` to a value, changing nothing else.
+ *
+ * It is expressed as what stays refused rather than as what is allowed, which
+ * is the direction that fails safe — a column added later is covered by the
+ * `raw_text`/`content_hash` clauses only if someone names it, so the guard
+ * names the identity-bearing columns explicitly and pins the rest with a test.
+ *
+ * The write is **once**: `OLD.corrected_text IS NOT NULL` refuses a second
+ * correction, so a correction cannot be silently replaced by a later one. A
+ * user who corrects twice gets a second `CaptureTranscriptCorrected` on the log
+ * and a refusal here — which is why `SqliteCaptureStore.recordCorrection`
+ * reads the row back rather than assuming its own write landed.
+ *
+ * `IS NOT` rather than `<>` throughout: `NULL <> 'x'` is `NULL`, which is not
+ * true, so a comparison written with `<>` would let a tampering UPDATE through
+ * on any column that happened to be `NULL`.
+ */
+const CORRECTION_IS_THE_EXCEPTION = `
+  OLD.corrected_text IS NOT NULL
+  OR NEW.corrected_text IS NULL
+  OR NEW.capture_id IS NOT OLD.capture_id
+  OR NEW.source IS NOT OLD.source
+  OR NEW.raw_text IS NOT OLD.raw_text
+  OR NEW.transcription_model IS NOT OLD.transcription_model
+  OR NEW.source_timestamp IS NOT OLD.source_timestamp
+  OR NEW.content_hash IS NOT OLD.content_hash
+  OR NEW.ingested_at IS NOT OLD.ingested_at`;
+
+/** The `WHEN` clause each refusal trigger carries, keyed by table and operation. */
+const TRIGGER_GUARDS: ReadonlyMap<string, string> = new Map([
+  ["captures.UPDATE", CORRECTION_IS_THE_EXCEPTION],
+]);
+
+/**
  * The two tables that are truth (`add.md` §10). Everything else in Otto is a
  * projection: derived, rebuildable from the log alone, and safe to delete.
  *
@@ -36,6 +75,25 @@ const REFUSED_MUTATIONS = [
  * Capture in one is worth keeping — so the migration procedure is: delete the
  * file. A real mechanism arrives when there is a real user's database to
  * protect, which is Slice 11 at the earliest.
+ *
+ * ## The one exception the triggers carry, added by Slice 9
+ *
+ * `corrected_text` is the column Slice 2 declared and Slice 9 writes, and
+ * writing it is an UPDATE against a table whose triggers refuse one. The
+ * trigger is **narrowed rather than dropped**: it fires on every UPDATE except
+ * a single transition of `corrected_text` from `NULL` to a value, changing
+ * nothing else. See `CORRECTION_IS_THE_EXCEPTION`.
+ *
+ * So the correction is still an append in the sense that matters — the event is
+ * what is true, the column is what that event implies, and `raw_text` and
+ * `content_hash` are as untouchable as they were before. What the exception
+ * buys is that extraction and the search index can read the corrected text
+ * without folding the log for it.
+ *
+ * The connection also sets `recursive_triggers`, without which `INSERT OR
+ * REPLACE` overwrites a row while running neither trigger — a hole in this
+ * guarantee since Slice 0, closed by Slice 9 because a correction path is
+ * exactly what would have reached for that statement.
  *
  * The three text columns hold three different things and only one is derived.
  * `raw_text` is input, held exactly as it arrived — the transcriber's output
@@ -335,9 +393,10 @@ function insertOnlyTriggers(table: string): string {
 }
 
 function refusalTrigger(table: string, operation: string, suffix: string): string {
+  const guard = TRIGGER_GUARDS.get(`${table}.${operation}`);
   return `
 CREATE TRIGGER IF NOT EXISTS ${table}_${suffix}
-BEFORE ${operation} ON ${table}
+BEFORE ${operation} ON ${table}${guard === undefined ? "" : `\nWHEN ${guard.trim()}`}
 BEGIN
   SELECT RAISE(ABORT, '${table} is append-only: ${operation} is not permitted');
 END;

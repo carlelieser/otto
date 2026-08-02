@@ -35,9 +35,53 @@ describe("SQLite refuses mutation at the database level", () => {
        '2026-08-01T09:00:00Z')`,
   ];
 
+  /**
+   * The same values the seeds insert, as a replace targeting the seeded key.
+   *
+   * A replace has to name every column, since the row it writes is a new one
+   * rather than an edit of the old — which is the property that makes it slip
+   * past an UPDATE trigger in the first place.
+   */
+  const EVENT_COLUMNS = `(
+       event_id, type, version, aggregate_type, aggregate_id, aggregate_version,
+       payload, proposal_id, capture_id, provider, model_version,
+       confidence, is_human_confirmed, recorded_at
+     ) VALUES ('evt-1', 'Tampered', 1, 'Capture', 'cap-1', 0,
+       '{"tampered":true}', 'prop-1', 'cap-1', 'local', 'qwen2.5-7b', 0.9, 0,
+       '2026-08-01T09:00:00Z')`;
+
+  const CAPTURE_COLUMNS = `(capture_id, source, raw_text, source_timestamp, content_hash, ingested_at)
+     VALUES ('cap-1', 'typed', 'tampered', '2026-08-01T09:00:00Z',
+       '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+       '2026-08-01T09:00:00Z')`;
+
+  /**
+   * Every column on `captures` except `corrected_text`, with a value that
+   * differs from the seed so the UPDATE is a real change.
+   *
+   * Named rather than inlined because two tests read it: one asserting these
+   * are still refused, and one asserting the list is the whole table.
+   */
+  const PROTECTED_COLUMNS: readonly [string, string][] = [
+    ["capture_id", `'cap-other'`],
+    ["source", `'voice'`],
+    ["raw_text", `'tampered'`],
+    ["transcription_model", `'large-v3'`],
+    ["source_timestamp", `'2020-01-01T00:00:00.000Z'`],
+    ["content_hash", `'0000'`],
+    ["ingested_at", `'2020-01-01T00:00:00.000Z'`],
+  ];
+
+  /**
+   * Built through `openDatabase` rather than from `CREATE_SCHEMA` alone.
+   *
+   * The schema declares the triggers; the connection is what makes them fire on
+   * every path that mutates a row, including the replace one. A test that
+   * applied the schema by hand would assert the half that is in SQL and miss
+   * the half that is a pragma.
+   */
   function seededDatabase(): Database.Database {
-    database = new Database(":memory:");
-    database.exec(CREATE_SCHEMA);
+    database = openDatabase();
     for (const row of SEED_ROWS) database.prepare(row).run();
     return database;
   }
@@ -59,6 +103,29 @@ describe("SQLite refuses mutation at the database level", () => {
     expect(() => seeded.prepare(`DELETE FROM ${table}`).run()).toThrow(/append-only/);
   });
 
+  /**
+   * The hole `INSERT OR REPLACE` opens, closed rather than left to convention.
+   *
+   * A replace is a delete followed by an insert, and SQLite runs neither the
+   * UPDATE nor the DELETE trigger on that path unless `recursive_triggers` is
+   * on. So the two triggers above are satisfied by a statement that overwrites
+   * the row anyway — which is exactly the mutation they exist to refuse, and
+   * exactly the statement a correction path is tempted to reach for when it
+   * needs `corrected_text` written to a table that will not take an UPDATE.
+   *
+   * Slice 9 re-verifies this pair because it is the first slice with a reason
+   * to write that column. The answer is that it never writes it: the event is
+   * truth, and `openDatabase` closes the replace path so the temptation fails
+   * loudly rather than quietly succeeding.
+   */
+  it.each(["events", "captures"])("rejects INSERT OR REPLACE on %s", (table) => {
+    const seeded = seededDatabase();
+    const columns = table === "events" ? EVENT_COLUMNS : CAPTURE_COLUMNS;
+    expect(() => seeded.prepare(`INSERT OR REPLACE INTO ${table} ${columns}`).run()).toThrow(
+      /append-only/,
+    );
+  });
+
   it("rejects an in-place payload edit", () => {
     // qa.md §4.4: an attempted in-place payload edit fails at the storage layer.
     const seeded = seededDatabase();
@@ -67,6 +134,80 @@ describe("SQLite refuses mutation at the database level", () => {
         .prepare(`UPDATE events SET payload = '{"tampered":true}' WHERE event_id = 'evt-1'`)
         .run(),
     ).toThrow(/append-only/);
+  });
+
+  /**
+   * The one write `captures` permits, and everything it still refuses.
+   *
+   * Slice 9 corrects a misheard transcript by writing `corrected_text`, which
+   * is an UPDATE against a table whose triggers refuse one. The trigger is
+   * narrowed to that single transition rather than dropped, so the immutability
+   * rule holds exactly where it held before — `qa.md` §7.6 asks that the
+   * original is never overwritten, and this is the level that enforces it.
+   */
+  describe("the correction exception on captures", () => {
+    it("permits corrected_text once, from null", () => {
+      const seeded = seededDatabase();
+      seeded.prepare(`UPDATE captures SET corrected_text = 'fixed'`).run();
+
+      const row = seeded.prepare(`SELECT corrected_text FROM captures`).get() as {
+        corrected_text: string;
+      };
+      expect(row.corrected_text).toBe("fixed");
+    });
+
+    it("refuses a second correction, so one is never silently replaced", () => {
+      const seeded = seededDatabase();
+      seeded.prepare(`UPDATE captures SET corrected_text = 'first'`).run();
+
+      expect(() => seeded.prepare(`UPDATE captures SET corrected_text = 'second'`).run()).toThrow(
+        /append-only/,
+      );
+    });
+
+    it("refuses clearing a correction back to null", () => {
+      const seeded = seededDatabase();
+      seeded.prepare(`UPDATE captures SET corrected_text = 'fixed'`).run();
+
+      expect(() => seeded.prepare(`UPDATE captures SET corrected_text = NULL`).run()).toThrow(
+        /append-only/,
+      );
+    });
+
+    /**
+     * The guard names columns explicitly, so a column added to `captures`
+     * without being named there is one a correction statement could write
+     * alongside the corrected text (ADR-0026).
+     *
+     * This asserts the list below is the whole table rather than a sample of
+     * it, which is what makes the cases underneath exhaustive instead of
+     * illustrative.
+     */
+    it("covers every column the table has", () => {
+      const seeded = seededDatabase();
+      const columns = (seeded.pragma("table_info(captures)") as { name: string }[]).map(
+        (column) => column.name,
+      );
+
+      expect(columns.sort()).toEqual(
+        [...PROTECTED_COLUMNS.map(([column]) => column), "corrected_text"].sort(),
+      );
+    });
+
+    // The exception is for one column. Every other column on the table is
+    // still what it was when the Capture was written — including the two the
+    // id derivation depends on, where a permitted write would re-key the corpus.
+    it.each(PROTECTED_COLUMNS)(
+      "still refuses an UPDATE to %s alongside a correction",
+      (column, value) => {
+        const seeded = seededDatabase();
+        expect(() =>
+          seeded
+            .prepare(`UPDATE captures SET corrected_text = 'fixed', ${column} = ${value}`)
+            .run(),
+        ).toThrow(/append-only/);
+      },
+    );
   });
 
   it("leaves the row untouched after a refused UPDATE", () => {

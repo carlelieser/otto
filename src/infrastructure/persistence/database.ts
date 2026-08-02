@@ -19,6 +19,7 @@ export function openDatabase(filename = ":memory:"): Database.Database {
   const database = new Database(filename);
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
+  database.pragma("recursive_triggers = ON");
   database.exec(CREATE_SCHEMA);
   return database;
 }

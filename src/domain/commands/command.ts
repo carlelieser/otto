@@ -29,3 +29,13 @@ export interface CommandTarget {
 
 /** The Command that ingests a Capture, producing `CaptureIngested`. */
 export const INGEST_CAPTURE = "IngestCapture";
+
+/**
+ * The Command that corrects a voice transcript, producing
+ * `CaptureTranscriptCorrected` (Slice 9, ADR-0014).
+ *
+ * The second Command a Capture accepts, and what gives the aggregate a version
+ * 1 — until this slice, `expectedVersion` was inert on the Capture aggregate
+ * because `CaptureIngested` was always version 0 of a new one.
+ */
+export const CORRECT_TRANSCRIPT = "CorrectTranscript";

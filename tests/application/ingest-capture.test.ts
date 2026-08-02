@@ -165,6 +165,7 @@ describe("the durability boundary sits before the event append", () => {
     const refusing: CaptureStore = {
       put: () => Promise.reject(new Error("the disk is full")),
       get: () => Promise.resolve(null),
+      recordCorrection: () => Promise.reject(new Error("the disk is full")),
       withoutIngestionEvent: () => Promise.resolve([]),
     };
     const ingestion = new CaptureIngestion(
