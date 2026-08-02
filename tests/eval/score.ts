@@ -39,6 +39,30 @@ export interface CaseScore {
   readonly precisionWrong: number;
   /** Fields dropped as unknown or derived. Zero-tolerance. */
   readonly violations: number;
+  /**
+   * Every field the model emitted, kept or dropped — the denominator schema
+   * violation rate is a rate *of*.
+   *
+   * `qa.md` §6.1 names the metric as a rate of "fields not in `schema.md`", so
+   * the denominator is fields rather than cases. Dividing by cases instead
+   * produces violations-per-note, which can exceed 1 and makes a bar written as
+   * a fraction mean something much weaker than it reads as.
+   */
+  readonly fieldsEmitted: number;
+  /**
+   * The model's self-reported `p(extraction)` summed over the mentions it
+   * returned, with `mentionsReturned` as its denominator.
+   *
+   * Not an accuracy — it is what the model *claimed*, and ADR-0006's whole
+   * argument is that the claim is a token distribution rather than a
+   * probability. It is carried because it is the input Slice 5 treats as a
+   * floor, and `qa.md` §6.3's "more proposals landing in review" is a statement
+   * about that number: a weaker model that reports the same confidence as a
+   * stronger one auto-applies at the same rate, which is the parity §6.3 calls
+   * a red flag rather than a success.
+   */
+  readonly confidenceSum: number;
+  readonly mentionsReturned: number;
 }
 
 /** Everything one case's extraction contributed to the metrics. */
@@ -51,8 +75,24 @@ export function scoreCase(evalCase: EvalCase, extraction: Extraction): CaseScore
     mentionsMissed: evalCase.expected.length - matches.length,
     mentionsInvented: extraction.mentions.length - matches.length,
     violations: extraction.violations.length,
+    fieldsEmitted: countEmittedFields(extraction),
+    confidenceSum: extraction.mentions.reduce((total, { confidence }) => total + confidence, 0),
+    mentionsReturned: extraction.mentions.length,
     ...totalled(fields),
   };
+}
+
+/**
+ * Fields the model emitted: those the parser kept, plus those it dropped.
+ *
+ * Counted from the extraction rather than from the expectations, because the
+ * violation rate is about what the model produced and not about what the corpus
+ * wanted — a model emitting one invented field on a note expecting none has a
+ * violation rate of 1, not of infinity.
+ */
+function countEmittedFields(extraction: Extraction): number {
+  const kept = extraction.mentions.reduce((total, mention) => total + mention.fields.length, 0);
+  return kept + extraction.violations.length;
 }
 
 /** One expected mention paired with the returned mention that satisfies it. */

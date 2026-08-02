@@ -3,7 +3,7 @@ import { parseExtraction } from "../../inference/extraction/parse-extraction.js"
 import { toJsonSchema } from "../../inference/extraction/to-json-schema.js";
 import type { Extraction, ExtractionRequest, Extractor } from "../../ports/extractor.js";
 import { extractionPrompt } from "./shared/extraction-prompt.js";
-import { type FetchLike, providerFailure } from "./shared/provider-failure.js";
+import { chatResponseJson, type FetchLike, providerFailure } from "./shared/provider-failure.js";
 
 /**
  * Extraction against OpenAI, opt-in (ADR-0016).
@@ -25,7 +25,9 @@ export class OpenAiExtractor implements Extractor {
 
   async extract(request: ExtractionRequest): Promise<Extraction> {
     const response = await this.#post(request);
-    const { mentions, violations } = parseExtraction(messageJson(response, this.#options.model));
+    const { mentions, violations } = parseExtraction(
+      chatResponseJson(response, this.#options.model),
+    );
     return { mentions, violations, provider: OPENAI_PROVIDER, modelVersion: this.#options.model };
   }
 
@@ -76,20 +78,3 @@ const OPENAI_DEFAULTS = {
   baseUrl: "https://api.openai.com/v1",
   apiKey: "",
 } as const satisfies Required<OpenAiOptions>;
-
-/** The message content, parsed. A refusal or an empty choice is a failed call. */
-function messageJson(response: unknown, model: string): unknown {
-  const content = (response as ChatResponse)?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") {
-    throw new Error(`Extraction from ${model} returned no message content`);
-  }
-  try {
-    return JSON.parse(content) as unknown;
-  } catch {
-    throw new Error(`Extraction from ${model} returned content that is not JSON`);
-  }
-}
-
-interface ChatResponse {
-  readonly choices?: readonly { readonly message?: { readonly content?: unknown } }[];
-}

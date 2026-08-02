@@ -21,6 +21,9 @@ function metrics(overrides: Partial<ExtractionMetrics> = {}): ExtractionMetrics 
     dateResolutionAccuracy: 0.7,
     datePrecisionAccuracy: 0.7,
     schemaViolationRate: 0,
+    // Below cloud's, which is the direction §6.3 requires: lower confidence
+    // means more review, which is the degradation the design intends.
+    meanConfidence: 0.72,
     ...overrides,
   };
 }
@@ -31,6 +34,7 @@ const CLOUD = metrics({
   mentionRecall: 0.95,
   mentionPrecision: 0.93,
   fieldValueAccuracy: 0.9,
+  meanConfidence: 0.88,
 });
 
 describe("the §6.3 floor", () => {
@@ -86,20 +90,39 @@ describe("the §6.3 floor", () => {
     expect(result.cleared).toBe(false);
   });
 
-  /**
-   * `qa.md` §6.3's clause that is easiest to get backwards: a local run whose
-   * numbers match cloud's is a red flag, not a success. A weaker model claiming
-   * *better* precision is the signature of invention, which is the
-   * corrupted-knowledge direction rather than the friction one.
-   */
-  it("fails a local run whose precision implausibly exceeds cloud's", () => {
-    const result = checkFloor(
-      metrics({ mentionPrecision: 1 }),
-      CLOUD.mentionPrecision === 1
-        ? CLOUD
-        : metrics({ provider: "anthropic", mentionPrecision: 0.5 }),
-    );
+  describe("the degradation clause", () => {
+    /**
+     * `qa.md` §6.3, stated exactly: "**A local run whose auto-apply rate matches
+     * cloud's is a red flag, not a success.**"
+     *
+     * This is the one clause where being *too close* to cloud fails, and the
+     * easiest thing in the file to get backwards — a tolerance written the usual
+     * way round passes precisely the case the spec singles out.
+     */
+    it("fails a local run reporting the same confidence as cloud", () => {
+      const parity = metrics({ meanConfidence: CLOUD.meanConfidence });
 
-    expect(result.cleared).toBe(false);
+      expect(checkFloor(parity, CLOUD).cleared).toBe(false);
+    });
+
+    it("fails a local run reporting more confidence than cloud", () => {
+      expect(checkFloor(metrics({ meanConfidence: 0.95 }), CLOUD).cleared).toBe(false);
+    });
+
+    it("clears when local reports measurably less confidence", () => {
+      expect(checkFloor(metrics({ meanConfidence: 0.72 }), CLOUD).cleared).toBe(true);
+    });
+
+    /**
+     * The other direction the clause guards: a weaker model claiming *better*
+     * precision is the signature of invention, which is the corrupted-knowledge
+     * direction rather than the friction one.
+     */
+    it("fails a local run whose precision implausibly exceeds cloud's", () => {
+      const inventing = metrics({ mentionPrecision: 1 });
+      const modestCloud = metrics({ provider: "anthropic", mentionPrecision: 0.5 });
+
+      expect(checkFloor(inventing, modestCloud).cleared).toBe(false);
+    });
   });
 });

@@ -97,24 +97,46 @@ function accuracyClause(local: ExtractionMetrics, cloud: ExtractionMetrics): Flo
 }
 
 /**
+ * How much of cloud's self-reported confidence local may claim before the two
+ * are "matching" rather than "degrading".
+ *
+ * `qa.md` §6.3 names parity itself as the failure, so this is a *floor* on the
+ * gap rather than a ceiling on it: local must report itself measurably less
+ * sure. Small, because the claim is only that the direction is right.
+ */
+const MINIMUM_CONFIDENCE_GAP = 0.02;
+
+/**
  * The clause that is easiest to get backwards.
  *
  * `qa.md` §6.3: **more proposals landing in review, not more wrong proposals
- * auto-applying.** A local run whose numbers match cloud's is a red flag rather
- * than a success, because the degradation the design intends is lower
- * confidence and therefore more review.
+ * auto-applying.** A local run whose auto-apply rate matches cloud's is a red
+ * flag, not a success — the degradation the design intends is lower confidence
+ * and therefore more review.
  *
- * Triage is Slice 5, so what is checkable here is the input to it: local's
- * mention recall should not *exceed* cloud's. A weaker model reporting that it
- * found more is the signature of a model inventing entities, which is the
- * corrupted-knowledge direction rather than the friction one.
+ * That makes this the one clause where being *too close* to cloud fails.
+ * Triage is Slice 5, so the auto-apply rate itself is not computable here; what
+ * is, is the input triage reads — `p(extraction)`, which Slice 5 treats as a
+ * floor. Two things must hold, and they fail in opposite directions:
+ *
+ * - Local must report itself **less** confident than cloud. Equal confidence
+ *   from a measurably weaker model is the parity §6.3 calls a red flag, because
+ *   it is what would make the two auto-apply at the same rate.
+ * - Local must not claim **better** precision than cloud, which is the
+ *   signature of a model inventing entities — the corrupted-knowledge direction
+ *   rather than the friction one.
  */
 function reviewFrictionClause(local: ExtractionMetrics, cloud: ExtractionMetrics): FloorClause {
-  const cleared = local.mentionPrecision <= cloud.mentionPrecision + MAXIMUM_ACCURACY_MARGIN;
+  const gap = cloud.meanConfidence - local.meanConfidence;
+  const inventsLess = local.mentionPrecision <= cloud.mentionPrecision + MAXIMUM_ACCURACY_MARGIN;
   return {
-    name: "degrades toward review rather than toward invention",
-    cleared,
-    detail: `local precision ${(local.mentionPrecision * 100).toFixed(1)}%, cloud ${(cloud.mentionPrecision * 100).toFixed(1)}%`,
+    name: "degrades toward review rather than toward parity or invention",
+    cleared: gap >= MINIMUM_CONFIDENCE_GAP && inventsLess,
+    detail:
+      `local reports ${(local.meanConfidence * 100).toFixed(1)}% mean confidence against cloud's ` +
+      `${(cloud.meanConfidence * 100).toFixed(1)}%, a gap of ${(gap * 100).toFixed(1)} points ` +
+      `(needs ≥ ${(MINIMUM_CONFIDENCE_GAP * 100).toFixed(0)}); precision ` +
+      `${(local.mentionPrecision * 100).toFixed(1)}% against ${(cloud.mentionPrecision * 100).toFixed(1)}%`,
   };
 }
 

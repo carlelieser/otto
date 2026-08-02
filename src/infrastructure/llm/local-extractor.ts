@@ -3,7 +3,7 @@ import { parseExtraction } from "../../inference/extraction/parse-extraction.js"
 import { toGbnf } from "../../inference/extraction/to-gbnf.js";
 import type { Extraction, ExtractionRequest, Extractor } from "../../ports/extractor.js";
 import { extractionPrompt } from "./shared/extraction-prompt.js";
-import { type FetchLike, providerFailure } from "./shared/provider-failure.js";
+import { chatResponseJson, type FetchLike, providerFailure } from "./shared/provider-failure.js";
 
 /**
  * Extraction against a local Qwen-class 7-8B instruct model, GBNF-constrained
@@ -35,7 +35,9 @@ export class LocalExtractor implements Extractor {
 
   async extract(request: ExtractionRequest): Promise<Extraction> {
     const response = await this.#post(request);
-    const { mentions, violations } = parseExtraction(asJson(response, this.#options.model));
+    const { mentions, violations } = parseExtraction(
+      chatResponseJson(response, this.#options.model),
+    );
     return {
       mentions,
       violations,
@@ -100,27 +102,3 @@ const LOCAL_DEFAULTS = {
   baseUrl: "http://127.0.0.1:1234/v1",
   model: "qwen2.5-7b-instruct",
 } as const satisfies Required<LocalExtractorOptions>;
-
-/**
- * The message content, parsed.
- *
- * An unreachable runtime and an unparseable response both throw, because both
- * are "extraction did not happen" — a state the pipeline handles by leaving
- * Captures accumulating (`add.md` §11). Returning an empty extraction instead
- * would durably record that the note said nothing.
- */
-function asJson(response: unknown, model: string): unknown {
-  const content = (response as ChatResponse)?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") {
-    throw new Error(`Extraction from ${model} returned no message content`);
-  }
-  try {
-    return JSON.parse(content) as unknown;
-  } catch {
-    throw new Error(`Extraction from ${model} returned content that is not JSON`);
-  }
-}
-
-interface ChatResponse {
-  readonly choices?: readonly { readonly message?: { readonly content?: unknown } }[];
-}

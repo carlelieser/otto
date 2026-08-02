@@ -52,28 +52,12 @@ export class AnthropicExtractor implements Extractor {
     return response.json();
   }
 
-  /**
-   * Tool use with `tool_choice` pinned to the one tool, which is how this
-   * provider is asked for structured output.
-   *
-   * Pinning it is what makes the response shape predictable: an unpinned
-   * `tool_choice` lets the model answer in prose when it judges the tool
-   * unnecessary, and "no entities in this note" is exactly the case where it
-   * would — turning a valid empty extraction into a parse failure.
-   */
   #body(request: ExtractionRequest): Record<string, unknown> {
     return {
       model: this.#options.model,
       max_tokens: this.#options.maxTokens,
       temperature: 0,
-      tools: [
-        {
-          name: TOOL_NAME,
-          description: TOOL_DESCRIPTION,
-          input_schema: toJsonSchema(outputSchema()),
-        },
-      ],
-      tool_choice: { type: "tool", name: TOOL_NAME },
+      ...STRUCTURED_OUTPUT,
       messages: [{ role: "user", content: extractionPrompt(request) }],
     };
   }
@@ -85,6 +69,26 @@ const TOOL_NAME = "record_mentions";
 
 const TOOL_DESCRIPTION =
   "Record the entities this note mentions and the values it states about them.";
+
+/**
+ * How this provider is asked for structured output: tool use, with
+ * `tool_choice` pinned to the one tool.
+ *
+ * Pinning is what makes the response shape predictable. An unpinned
+ * `tool_choice` lets the model answer in prose when it judges the tool
+ * unnecessary, and "no entities in this note" is exactly the case where it
+ * would — turning a valid empty extraction into a parse failure.
+ *
+ * A constant rather than lines in `#body` because it is a table of literal
+ * values: the schema is generated once from `schema.md` and cannot vary per
+ * request, since nothing in a request changes what Otto is allowed to know.
+ */
+const STRUCTURED_OUTPUT = {
+  tools: [
+    { name: TOOL_NAME, description: TOOL_DESCRIPTION, input_schema: toJsonSchema(outputSchema()) },
+  ],
+  tool_choice: { type: "tool", name: TOOL_NAME },
+} as const;
 
 const ANTHROPIC_API_VERSION = "2023-06-01";
 

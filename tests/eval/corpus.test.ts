@@ -101,4 +101,22 @@ describe("the eval corpus", () => {
 
     expect(empty.length).toBeGreaterThanOrEqual(4);
   });
+
+  /**
+   * `qa.md` §6.2: "Two notes mentioning the same new entity, to confirm
+   * serialisation prevents a race (ADD §4)."
+   *
+   * The race is Slice 4's to test — extraction reads nothing but the text, so
+   * both notes extract identically whatever order they arrive in, and there is
+   * nothing here to serialise. What this pins is that the *pair* survives as a
+   * pair: the two cases are only useful together, and a corpus edit dropping
+   * one leaves the other looking like an ordinary create.
+   */
+  it("keeps the two notes naming one new entity together, for Slice 4 to race", () => {
+    const pair = EVAL_CORPUS.filter(({ covers }) => covers === "concurrent-mention");
+
+    expect(pair.length).toBeGreaterThanOrEqual(2);
+    const named = pair.flatMap(({ expected }) => expected.map(({ text }) => text));
+    expect(new Set(named).size).toBeLessThan(named.length);
+  });
 });

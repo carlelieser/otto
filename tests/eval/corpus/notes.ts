@@ -132,7 +132,7 @@ export const EVAL_CORPUS: readonly EvalCase[] = [
     covers: "concurrent-mention",
     note: "Kicked off the Selkirk migration this morning.",
     capturedAt: MONDAY,
-    why: "Paired with `concurrent-second`: two notes mentioning the same new entity, to confirm serialisation prevents a race (`add.md` §4).",
+    why: "Paired with `concurrent-second`: two notes mentioning the same new entity (`qa.md` §6.2). The race it names is `add.md` §4's, and **extraction cannot observe it** — this stage reads nothing but the text, so both notes extract identically whatever order they arrive in. The pair is here because Slice 4 needs exactly this input to test that serialisation prevents a duplicate Selkirk, and a corpus case added later would not have been measured against extraction at all.",
     expected: [{ text: "Selkirk migration", entityType: "Project" }],
   },
   {
