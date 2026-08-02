@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import { CAPTURE_TRANSLATORS } from "./application/pipeline/capture-translators.js";
-import { Executor } from "./application/pipeline/execute-command.js";
+import { KNOWLEDGE_TRANSLATORS } from "./application/pipeline/knowledge-translators.js";
+import { type CommandTranslator, Executor } from "./application/pipeline/execute-command.js";
 import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
@@ -15,12 +16,14 @@ import { SqliteCaptureStore } from "./infrastructure/persistence/sqlite-capture-
 import { SqliteEventStore } from "./infrastructure/persistence/sqlite-event-store.js";
 import { SqliteEntityRepository } from "./infrastructure/persistence/sqlite-entity-repository.js";
 import { SqliteProposalStore } from "./infrastructure/persistence/sqlite-proposal-store.js";
+import { SqliteDispositionStore } from "./infrastructure/persistence/sqlite-disposition-store.js";
 import { LocalEmbedder } from "./infrastructure/embedding/local-embedder.js";
 import { LocalAdjudicator } from "./infrastructure/llm/local-adjudicator.js";
 import { WhisperCliTranscriber } from "./infrastructure/transcription/whisper-cli-transcriber.js";
 import type { CandidateReads } from "./inference/resolution/candidate-generation.js";
 import type { Adjudicator } from "./ports/adjudicator.js";
 import type { CaptureStore } from "./ports/capture-store.js";
+import type { DispositionStore } from "./ports/disposition-store.js";
 import type { Embedder } from "./ports/embedder.js";
 import type { EventStore } from "./ports/event-store.js";
 import type { Extractor } from "./ports/extractor.js";
@@ -73,6 +76,15 @@ export interface Storage {
    */
   readonly proposals: ProposalStore;
   /**
+   * Triage's decision about each Proposal, and the only place a discard is
+   * visible from (`triage.md` §7).
+   *
+   * On the same connection as the rest for the same reason: the pipeline is
+   * serialised to one Capture at a time, so one writer is a property of the
+   * design rather than a constraint WAL imposes on it.
+   */
+  readonly dispositions: DispositionStore;
+  /**
    * The entity projection resolution reads current knowledge through.
    *
    * On the same connection as the rest, and derived rather than truth — every
@@ -92,6 +104,7 @@ export function createStorage(options: StorageOptions = {}): Storage {
     events: new SqliteEventStore(database),
     captures: new SqliteCaptureStore(database),
     proposals: new SqliteProposalStore(database),
+    dispositions: new SqliteDispositionStore(database),
     entities: new SqliteEntityRepository(database),
     close: () => database.close(),
   };
@@ -282,9 +295,23 @@ export function createRecovery(storage: Storage, ingestion: CaptureIngestion): C
   return new CaptureRecovery(storage.captures, ingestion);
 }
 
+/**
+ * Every Command the executor understands: Captures and knowledge.
+ *
+ * Two maps merged rather than one growing map, because they arrived with
+ * different stages and answer to different documents — ingestion's is `add.md`
+ * §5.1, and the knowledge ones are §5.4's closed vocabulary. Merged here, in
+ * the composition root, because assembling the whole from its parts is what
+ * this module is for.
+ */
+export const ALL_TRANSLATORS: ReadonlyMap<string, CommandTranslator> = new Map([
+  ...CAPTURE_TRANSLATORS,
+  ...KNOWLEDGE_TRANSLATORS,
+]);
+
 /** The executor, wired to a store. The clock is injected so tests can pin it. */
 export function createExecutor(store: EventStore, now: () => string = defaultClock): Executor {
-  return new Executor(store, CAPTURE_TRANSLATORS, now);
+  return new Executor(store, ALL_TRANSLATORS, now);
 }
 
 function defaultClock(): string {

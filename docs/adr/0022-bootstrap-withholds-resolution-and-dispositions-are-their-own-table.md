@@ -1,0 +1,26 @@
+# Bootstrap withholds resolution-requiring proposals as a rule; dispositions are their own deletable table
+
+---
+Status: accepted
+---
+
+ADR-0012 settled the numbers triage runs on: the product, the two thresholds, the fifty-Correction bootstrap, the sampling rates. Implementing them surfaced two decisions those numbers do not determine, and both are the kind that is expensive to change later.
+
+**Bootstrap withholds resolution-requiring proposals as a stated rule, not as an arithmetic consequence.** [`triage.md`](../triage.md) §4 describes the effect as derived: capping `p(extraction)` at 0.90 means "0.90 × anything < 1 is below 0.90", so nothing requiring a resolution judgement reaches the auto-apply band. The arithmetic is one case short. `p(resolution)` of exactly 1 gives a product of exactly 0.90, and the band is inclusive at its lower edge, so the single proposal resolution was *perfectly* sure of would apply unattended during the period the cap exists to prevent exactly that.
+
+The margin resolution reports reaches 1 only when the best candidate scores 1 and the runner-up scores 0, which makes this rare rather than impossible. Rare and silently wrong in the trust-destroying direction is the combination [`qa.md`](../qa.md) §1 ranks first among the things this system must not do, and the slice's own verification asks for a proposal "at maximum confidence on both figures" to be withheld. So the rule is written where it can be read: during bootstrap, a proposal carrying a resolution figure does not auto-apply, whatever the figure is.
+
+The rejected alternative was lowering the cap below the auto-apply edge. It closes the same gap and costs more than it should: a create carries no resolution figure, so its confidence *is* the capped self-report, and a cap below the edge would stop first-ever mentions from applying unattended. That is the friction PRD §4.1 exists to rule out, and paying it to fix an edge case in the other half of the table is the wrong trade.
+
+**The bootstrap cap is read off the threshold table rather than written as its own number.** The cap works by being exactly the auto-apply edge. Written twice, a calibration run that moves the threshold leaves the cap behind, and the failure is silent in both directions — either bootstrap stops constraining anything, or it closes creates out of auto-apply too. Since thresholds are per provider and model version (ADR-0008), the cap is derived per model as well.
+
+**Triage's decisions live in `proposal_dispositions`, a table with no immutability triggers and a delete path.** ADR-0019 established that `extraction_proposals` is derived state rather than a third table that is truth. A disposition is the same kind of thing for the same reason: re-triaging a Proposal against the same thresholds reproduces it.
+
+It goes one step further than ADR-0019, and that step is the decision. Discards are retained for thirty days and then are not ([`triage.md`](../triage.md) §7), so this is the first table in Otto that *must* be able to delete a row. Immutability triggers here would forbid the retention window they would appear to be protecting. It is deliberately not `projection_`-prefixed either: ADD §10 reserves that namespace for tables rebuildable from the log alone, and a discard never becomes an event, so the log holds no record to rebuild it from. Naming it as a projection would make a claim about it that a rebuild would disprove by emptying it.
+
+## Consequences
+
+- **Slice 5 ships in permanent bootstrap.** Corrections arrive in Slice 7, so the count is zero until then and only unambiguous creates apply unattended. This is the correct behaviour for a system with no calibration data rather than a gap, and it means the withholding rule above is the ordinary path rather than an edge case.
+- **The sampling draw is injectable and is not a switch.** Triage takes a draw defaulting to real randomness so integration tests can assert what happens to a confident proposal without one run in five being sampled into review underneath them. No value of it stops sampling; it only decides which proposals sampling catches, which keeps [`triage.md`](../triage.md) §6's "no off switch" intact. A test asserts the absence of any configuration path, checked against source rather than behaviour, because an absent switch is not observable by calling the function.
+- **The application policy's prose avoids the word "confidence" as well as its code.** ADD §3's fourth rule is a grep over `domain/`, and a doc comment explaining that the policy never reads a Confidence trips it exactly as a violation would. The alternative was an exemption list beside ADR-0011's provenance carve-out, and an exemption list is a thing that grows. Writing the rule as "never, however sure Otto is" costs one sentence and keeps the grep at maximum strictness.
+- **Re-proposal cannot reach an extractor**, because `repropose.ts` imports the differ and nothing model-facing. [`qa.md`](../qa.md) §5.6 asks for the absence of the call to be asserted; asserting it structurally proves there is nothing that could make the call on any input, where a spy would only prove it went unmade on one.
