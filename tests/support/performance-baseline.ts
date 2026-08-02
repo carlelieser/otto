@@ -54,14 +54,15 @@ const NOTE =
 
 const READING =
   "Four of six are at or better than the spike. Two are not, and the gap is " +
-  "structural rather than a regression: rebuild is 8.4 s against a 215 ms " +
-  "baseline, and 100-event catch-up is 145 ms against 11.6 ms. The spike's " +
-  "projection logic was a stand-in that wrote entity rows only. This projector " +
+  "structural rather than a regression: rebuild is ~8 s against a 215 ms " +
+  "baseline, and 100-event catch-up is ~130-150 ms against 11.6 ms. The " +
+  "spike's projection logic was a stand-in that wrote entity rows only. This " +
+  "projector " +
   "also writes a provenance row per field (add.md §7) and maintains an FTS " +
   "index, which is roughly three writes per event where the spike did one. " +
-  "Both stay inside their bars — 7x and 3.5x — so the cost is accepted rather " +
-  "than tuned. These figures, not the spike's, are the baseline the next slice " +
-  "compares against.";
+  "Both stay inside their bars — 7.5x and 3.8x — so the cost is accepted " +
+  "rather than tuned. These figures, not the spike's, are the baseline the " +
+  "next slice compares against.";
 
 const REGRESSION =
   "Rebuild past ~20 s or catch-up past ~300 ms, either of which would mean " +
