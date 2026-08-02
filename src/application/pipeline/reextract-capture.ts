@@ -28,6 +28,21 @@ import type { CaptureExtraction } from "./extract-capture.js";
  * re-processing history when a model changes would flood the review queue and
  * re-litigate settled knowledge. Nothing here schedules itself, which is what
  * keeps that distinction a property of the callers rather than of this class.
+ *
+ * ## What this stage stops short of
+ *
+ * It re-runs **extraction**, not the whole pipeline. Resolution, the differ,
+ * and triage are not reachable from here and are not invoked — **there is no
+ * pipeline driver in Otto yet**, and triage has been wired and undriven since
+ * Slice 5 (`composition-root.ts`). So `emerged` reports which Proposals are new
+ * and does not close anything: closing a Proposal against current state is
+ * `repropose.ts`'s `no_change`, which runs from the differ and needs the driver
+ * that does not exist.
+ *
+ * Under the same model nothing is new, so nothing *would* reach a queue —
+ * which is the outcome `runtime.md` §3 describes, arrived at because the ids
+ * collided rather than because anything was adjudicated and closed. Saying so
+ * beats a comment implying this stage already satisfies §3's closure rule.
  */
 export class CaptureReextraction {
   readonly #extraction: CaptureExtraction;
@@ -39,44 +54,22 @@ export class CaptureReextraction {
   }
 
   /**
-   * The Proposals this Capture's *current* text produces, extracting afresh.
+   * Re-runs extraction, reporting what it produced and which of it is new.
    *
-   * Everything the run produced, including Proposals that were already
-   * recorded — `emerged` is what separates the two, and a caller that wants
-   * only the differences asks for that instead.
+   * One method rather than three. Both answers come from one model call, and
+   * splitting them into separate reads would either call the model twice for a
+   * single correction or leave a caller to remember not to.
+   *
+   * `emerged` is a subtraction **by id**, not a comparison of claimed values.
+   * Under the same model the ids collide, the store no-ops, and the set is
+   * empty — a re-run that confirms what Otto already extracted has nothing new
+   * to say. Under a different model version the ids differ and everything is
+   * new, which is the other half of `runtime.md` §3.
    */
-  async reextract(capture: Capture): Promise<readonly ExtractedProposal[]> {
-    return this.#extraction.reextract(capture);
-  }
-
-  /**
-   * The Proposals a re-run produces that were **not already recorded**.
-   *
-   * Under the same model this is empty: the ids collide, the store no-ops, and
-   * a re-run confirming what Otto already extracted has nothing new to say.
-   * That emptiness is what `runtime.md` §3's silent closure rests on one stage
-   * later — nothing reaches the queue because nothing new was proposed.
-   *
-   * Under a different model version the ids differ and every Proposal is new,
-   * which is the other half of §3 and the reason this is a subtraction by id
-   * rather than a comparison of claimed values.
-   */
-  async emerged(capture: Capture): Promise<readonly ExtractedProposal[]> {
-    return (await this.reextractAndDiff(capture)).emerged;
-  }
-
-  /**
-   * One re-run, and both answers about it.
-   *
-   * The two are wanted together by every caller that acts on a correction, and
-   * asking for them separately would call the model twice for one correction —
-   * which the automatic re-run makes a per-correction cost rather than a
-   * per-request one.
-   */
-  async reextractAndDiff(capture: Capture): Promise<ReextractionOutcome> {
+  async reextract(capture: Capture): Promise<ReextractionOutcome> {
     const before = await this.#proposals.forCapture(capture.captureId);
     const recorded = new Set(before.map((proposal) => proposal.proposalId));
-    const proposals = await this.reextract(capture);
+    const proposals = await this.#extraction.reextract(capture);
     return { proposals, emerged: proposals.filter((it) => !recorded.has(it.proposalId)) };
   }
 }

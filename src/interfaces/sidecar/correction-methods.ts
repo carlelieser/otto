@@ -1,4 +1,7 @@
-import type { TranscriptCorrection } from "../../application/pipeline/correct-transcript.js";
+import {
+  requireCorrectedText,
+  type TranscriptCorrection,
+} from "../../application/pipeline/correct-transcript.js";
 import type { CaptureReextraction } from "../../application/pipeline/reextract-capture.js";
 import type { Capture } from "../../ports/capture-store.js";
 import type { ExtractedProposal } from "../../ports/proposal-store.js";
@@ -49,6 +52,11 @@ interface CorrectionResult {
  * has explicitly said the input was wrong, so Otto re-reads the note without
  * being asked again. Everywhere else re-extraction is manual and scoped.
  *
+ * Extraction is as far as it goes, because that is as far as Otto goes — the
+ * stages past it have no driver yet (ADR-0026). A caller receives what the
+ * corrected text extracted and what is new in it, and nothing here pretends a
+ * resolution or a triage decision followed.
+ *
  * The order is load-bearing. The correction is appended and materialised first,
  * so the Capture the re-run reads is the corrected one — re-extracting before
  * the correction is durable would read the misheard text and record Proposals
@@ -63,7 +71,7 @@ async function correctTranscript(
   const capture = await correction.correct(captureId, correctedText);
   // One run, both answers. Asking for the re-run and then for what is new in
   // it would call the model twice for one correction.
-  return { capture, ...(await reextraction.reextractAndDiff(capture)) };
+  return { capture, ...(await reextraction.reextract(capture)) };
 }
 
 interface CorrectionRequest {
@@ -71,13 +79,18 @@ interface CorrectionRequest {
   readonly correctedText: string;
 }
 
+/**
+ * The two parameters, with only the transport's half decided here.
+ *
+ * A missing `captureId` is a malformed request and this is the place to say so.
+ * Whether the text is *substantive* is a question about corrections, so it is
+ * `requireCorrectedText`'s — a second copy here would have accepted `"   "` at
+ * the transport and had the stage refuse it one call later.
+ */
 function correctionRequest(params: unknown): CorrectionRequest {
   const { captureId, correctedText } = (params ?? {}) as Partial<CorrectionRequest>;
   if (typeof captureId !== "string" || captureId === "") {
     throw new Error("correctTranscript requires a captureId");
   }
-  if (typeof correctedText !== "string" || correctedText === "") {
-    throw new Error("correctTranscript requires correctedText");
-  }
-  return { captureId, correctedText };
+  return { captureId, correctedText: requireCorrectedText(captureId, correctedText) };
 }

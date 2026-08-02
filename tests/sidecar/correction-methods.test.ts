@@ -165,7 +165,25 @@ describe("the sidecar's correction method", () => {
   it("requires a captureId and corrected text", async () => {
     const response = await call(sidecar(), "correctTranscript", { captureId: "cap-1" });
 
-    expect(response).toMatchObject({ error: { message: /correctedText/ } });
+    expect(response).toMatchObject({ error: { message: /corrected text is empty/ } });
+  });
+
+  /**
+   * What counts as a non-empty correction is decided once, in the stage.
+   *
+   * The transport had its own emptiness check, and the two disagreed: `"   "`
+   * passed here and was refused a call later, so the same input failed in two
+   * places with two messages depending on which layer saw it first.
+   */
+  it("refuses whitespace-only text at the transport, as the stage would", async () => {
+    const capture = await aVoiceCapture();
+
+    const response = await call(sidecar(), "correctTranscript", {
+      captureId: capture.captureId,
+      correctedText: "   ",
+    });
+
+    expect(response).toMatchObject({ error: { message: /corrected text is empty/ } });
   });
 });
 

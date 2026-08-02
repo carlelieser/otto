@@ -73,6 +73,37 @@ export class TypedCaptureNotCorrectableError extends Error {
   }
 }
 
+/** There is no Capture to correct under this id. */
+export class CaptureNotFoundError extends Error {
+  constructor(readonly captureId: string) {
+    super(`Cannot correct Capture ${captureId}: no such Capture`);
+    this.name = "CaptureNotFoundError";
+  }
+}
+
+/** A correction has to say something; blank is a deletion of the transcript. */
+export class EmptyCorrectionError extends Error {
+  constructor(readonly captureId: string) {
+    super(`Cannot correct Capture ${captureId}: the corrected text is empty`);
+    this.name = "EmptyCorrectionError";
+  }
+}
+
+/**
+ * What counts as corrected text, decided here rather than at each caller.
+ *
+ * The transport validates its own parameters — a missing field is a malformed
+ * request — but *what makes a correction non-empty* is a question about
+ * corrections, and two copies of the answer disagree the moment one of them
+ * learns about whitespace. This is that answer, and the sidecar defers to it.
+ */
+export function requireCorrectedText(captureId: string, correctedText: unknown): string {
+  if (typeof correctedText !== "string" || !isNonEmptyText(correctedText)) {
+    throw new EmptyCorrectionError(captureId);
+  }
+  return correctedText;
+}
+
 export class TranscriptCorrection {
   readonly #dependencies: CorrectionDependencies;
 
@@ -90,30 +121,27 @@ export class TranscriptCorrection {
    *
    * Re-extraction is deliberately **not** here. It is the caller's, because
    * this stage is the one that must reach no extractor for the immutability
-   * argument to hold structurally — see `recorrect-capture.ts`.
+   * argument to hold structurally — see `reextract-capture.ts`.
    */
   async correct(captureId: string, correctedText: string): Promise<Capture> {
-    const capture = await this.#correctable(captureId, correctedText);
-    await this.#dependencies.executor.execute(await this.#commandFor(capture, correctedText));
+    requireCorrectedText(captureId, correctedText);
+    await this.#correctable(captureId);
+    await this.#dependencies.executor.execute(await this.#commandFor(captureId, correctedText));
     const corrected = await this.#dependencies.captures.recordCorrection(captureId, correctedText);
     await this.#dependencies.reindexCaptures?.();
     return corrected;
   }
 
   /** The Capture, if there is one and it is the kind that can be corrected. */
-  async #correctable(captureId: string, correctedText: string): Promise<Capture> {
-    if (!isNonEmptyText(correctedText)) {
-      throw new Error(`Cannot correct Capture ${captureId}: the corrected text is empty`);
-    }
+  async #correctable(captureId: string): Promise<Capture> {
     const capture = await this.#dependencies.captures.get(captureId);
-    if (capture === null) throw new Error(`Cannot correct Capture ${captureId}: no such Capture`);
+    if (capture === null) throw new CaptureNotFoundError(captureId);
     if (capture.source !== "voice") throw new TypedCaptureNotCorrectableError(captureId);
     return capture;
   }
 
   /** The Command, stamped with the version the Capture aggregate now holds. */
-  async #commandFor(capture: Capture, correctedText: string): Promise<Command> {
-    const { captureId } = capture;
+  async #commandFor(captureId: string, correctedText: string): Promise<Command> {
     const expectedVersion = await this.#dependencies.currentVersionOf(captureId);
     return {
       type: CORRECT_TRANSCRIPT,

@@ -78,7 +78,7 @@ describe("a misheard name is fixable in one step", () => {
     );
     return {
       capture: corrected,
-      ...(await createReextraction(extraction, storage).reextractAndDiff(corrected)),
+      ...(await createReextraction(extraction, storage).reextract(corrected)),
     };
   }
 
@@ -115,18 +115,32 @@ describe("a misheard name is fixable in one step", () => {
   /**
    * **Provenance names the corrected text** as what produced the fact.
    *
-   * Provenance names a Capture, and the Capture reads as its corrected text
-   * once one exists (`extract-capture.ts`) — so the text behind a fact follows
-   * the correction rather than being pinned to what was misheard.
+   * Provenance names a Capture, and the text behind that Capture is whatever
+   * the read path resolves it to. So this asserts against the two surfaces that
+   * actually resolve it — extraction's request, and the Capture search index —
+   * rather than re-implementing the `correctedText ?? rawText` fallback in the
+   * test, which would assert only that the test agrees with itself.
    */
   it("names the corrected text as what a re-extracted Proposal came from", async () => {
     const capture = await aMisheardNote();
+    const asked: string[] = [];
+    const watching = {
+      extract: (request: { text: string }) => {
+        asked.push(request.text);
+        return anExtractor("canned-v2").extract(request as never);
+      },
+    };
 
-    const { proposals } = await correcting(capture, "canned-v2");
+    await createCorrection(storage, () => AT).correct(capture.captureId, CORRECTED);
+    const extraction = createExtraction(storage, watching as never, () => AT);
+    const { proposals } = await createReextraction(extraction, storage).reextract(
+      (await storage.captures.get(capture.captureId))!,
+    );
 
-    const [proposal] = proposals;
-    const source = await storage.captures.get(proposal!.captureId);
-    expect(source?.correctedText ?? source?.rawText).toBe(CORRECTED);
+    // What the model was actually handed, and what the Proposal traces back to.
+    expect(asked).toEqual([CORRECTED]);
+    expect(proposals[0]!.captureId).toBe(capture.captureId);
+    expect(await storage.views.searchCaptures("Sarah")).toHaveLength(1);
   });
 
   /** Nothing was overwritten: both events stand, in the order they happened. */

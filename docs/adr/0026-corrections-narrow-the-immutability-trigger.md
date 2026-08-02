@@ -1,4 +1,4 @@
-# A correction narrows the immutability trigger rather than dropping it, and the replace path is closed
+# A correction narrows the immutability trigger rather than dropping it, the replace path is closed, and the automatic re-run stops at extraction
 
 ---
 Status: accepted
@@ -18,6 +18,10 @@ The guard is written as **what stays refused** rather than as what is allowed, b
 
 This is worth stating as a decision rather than a bug fix because it changes what `qa.md` §4.1's guarantee actually rested on. The triggers were necessary and not sufficient; the connection configuration is load-bearing, and a database opened without `openDatabase` does not have the property the schema appears to declare. The test builds its database through `openDatabase` for that reason.
 
+**The automatic re-run stops at extraction, because there is nothing further to drive.** `runtime.md` §5 says correcting a transcript "re-runs the pipeline for that Capture," and what ships re-runs extraction only. Resolution, the differ, and triage are not invoked — not by choice here, but because **no pipeline driver exists**: triage has been wired and undriven since Slice 5, and nothing in Otto orchestrates the stages end to end for any Capture, corrected or not.
+
+So the correction path is complete up to the boundary the system currently has, and it stops there rather than growing a second orchestrator that would have to be reconciled with the first when one arrives. The consequence is that `runtime.md` §3's "a re-extracted Proposal matching current state closes silently" is *satisfied vacuously* rather than implemented: under the same model the derived ids collide, nothing new is proposed, and nothing reaches a queue — but no Proposal is adjudicated and closed, because `repropose.ts`'s `no_change` closure runs from the differ and needs the driver. The code says this where a reader would otherwise assume the rule is enforced.
+
 ## Considered Options
 
 - **A separate `capture_corrections` table** — rejected: strands the column Slice 2 declared for this purpose, and puts a join in front of every read of a Capture's current text.
@@ -30,3 +34,4 @@ This is worth stating as a decision rather than a bug fix because it changes wha
 - **A correction cannot be corrected.** The trigger refuses a second write to `corrected_text`, so a user who mis-types their correction has no path to fix it. This is deliberate for MVP — the log would carry a second `CaptureTranscriptCorrected` with no column to land in, which is a divergence between event and materialisation rather than an edit. A slice that wants re-correction changes the column to hold the latest fold of the correction events, not the trigger.
 - **Adding a column to `captures` requires naming it in `CORRECTION_IS_THE_EXCEPTION`.** A column left out is one a correction statement could write alongside the corrected text. The test enumerating the columns is what catches it.
 - **Every connection must go through `openDatabase`.** The immutability guarantee is not fully declared in `CREATE_SCHEMA`, and a caller constructing a connection by hand gets a database that permits replacement.
+- **"The entity Otto derived updates" is not yet true end to end.** The corrected text is what extraction reads and what search returns, but no entity is re-derived from it, because the stages past extraction have no driver. The slice that builds one inherits the correction path as a caller rather than having to retrofit it.

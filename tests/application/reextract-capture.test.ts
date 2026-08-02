@@ -62,7 +62,7 @@ describe("re-extraction reads the corrected text", () => {
    * extracts, because the corrected text is what Extraction read.
    */
   it("extracts the corrected name rather than the misheard one", async () => {
-    const proposals = await reextractionWith(anExtractor()).reextract(aCorrectedCapture());
+    const { proposals } = await reextractionWith(anExtractor()).reextract(aCorrectedCapture());
 
     expect(proposals.map(({ mention }) => mention.text)).toEqual(["Sarah"]);
   });
@@ -143,8 +143,8 @@ describe("re-extraction under the id derivation", () => {
     const first = await reextractionWith(anExtractor()).reextract(capture);
     const second = await reextractionWith(anExtractor()).reextract(capture);
 
-    expect(second.map((proposal) => proposal.proposalId)).toEqual(
-      first.map((proposal) => proposal.proposalId),
+    expect(second.proposals.map((proposal) => proposal.proposalId)).toEqual(
+      first.proposals.map((proposal) => proposal.proposalId),
     );
   });
 
@@ -154,8 +154,8 @@ describe("re-extraction under the id derivation", () => {
     const first = await reextractionWith(anExtractor("canned")).reextract(capture);
     const better = await reextractionWith(anExtractor("canned-v2")).reextract(capture);
 
-    expect(better.map((proposal) => proposal.proposalId)).not.toEqual(
-      first.map((proposal) => proposal.proposalId),
+    expect(better.proposals.map((proposal) => proposal.proposalId)).not.toEqual(
+      first.proposals.map((proposal) => proposal.proposalId),
     );
   });
 
@@ -168,7 +168,7 @@ describe("re-extraction under the id derivation", () => {
     const capture = aCorrectedCapture();
     await reextractionWith(anExtractor()).reextract(capture);
 
-    expect(await reextractionWith(anExtractor()).emerged(capture)).toEqual([]);
+    expect((await reextractionWith(anExtractor()).reextract(capture)).emerged).toEqual([]);
   });
 
   /** The other half: a different model version says something new. */
@@ -176,7 +176,7 @@ describe("re-extraction under the id derivation", () => {
     const capture = aCorrectedCapture();
     await reextractionWith(anExtractor("canned")).reextract(capture);
 
-    const emerged = await reextractionWith(anExtractor("canned-v2")).emerged(capture);
+    const { emerged } = await reextractionWith(anExtractor("canned-v2")).reextract(capture);
 
     expect(emerged.map((proposal) => proposal.mention.text)).toEqual(["Sarah"]);
   });
