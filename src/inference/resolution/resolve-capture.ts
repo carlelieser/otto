@@ -114,12 +114,7 @@ async function adjudicated(
   dependencies: ResolutionDependencies,
 ): Promise<ResolvedMention> {
   const shortlist = scored.slice(0, ADJUDICATION_SHORTLIST);
-  const { chosenIndex } = await dependencies.adjudicate({
-    noteText: mention.noteText,
-    mentionText: mention.text,
-    entityType: mention.entityType,
-    candidates: shortlist.map(({ candidate }) => summarise(candidate)),
-  });
+  const { chosenIndex } = await dependencies.adjudicate(requestFrom(mention, shortlist));
 
   return {
     // `confidence` is carried through untouched: an adjudicated pick among
@@ -128,6 +123,19 @@ async function adjudicated(
     resolution: withChoice(resolution, shortlist, chosenIndex),
     wasAdjudicated: true,
     candidateCount: scored.length,
+  };
+}
+
+/** The note, the mention, and the shortlist — rendered without entity ids. */
+function requestFrom(
+  mention: MentionToResolve,
+  shortlist: readonly ScoredCandidate[],
+): AdjudicationRequest {
+  return {
+    noteText: mention.noteText,
+    mentionText: mention.text,
+    entityType: mention.entityType,
+    candidates: shortlist.map(({ candidate }) => summarise(candidate)),
   };
 }
 

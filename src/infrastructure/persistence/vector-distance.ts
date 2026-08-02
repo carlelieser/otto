@@ -73,20 +73,31 @@ export function cosineDistance(left: Float32Array, right: Float32Array): number 
 /** Opposed vectors, and what an undefined comparison reports. */
 const MAXIMUM_DISTANCE = 2;
 
-/** The dot product and both squared magnitudes, in one pass. */
-function accumulate(
-  left: Float32Array,
-  right: Float32Array,
-): { dot: number; leftMagnitude: number; rightMagnitude: number } {
-  let dot = 0;
-  let leftMagnitude = 0;
-  let rightMagnitude = 0;
+/** The three sums a cosine needs, accumulated together. */
+interface Sums {
+  dot: number;
+  leftMagnitude: number;
+  rightMagnitude: number;
+}
+
+/**
+ * The dot product and both squared magnitudes, in one pass.
+ *
+ * One pass rather than three because this runs per stored vector on every
+ * search — 3,000 times per query at the specified corpus — and three passes
+ * over the same two arrays is three times the memory traffic for the same
+ * arithmetic.
+ */
+function accumulate(left: Float32Array, right: Float32Array): Sums {
+  const sums: Sums = { dot: 0, leftMagnitude: 0, rightMagnitude: 0 };
   for (let index = 0; index < left.length; index += 1) {
-    const leftComponent = left[index]!;
-    const rightComponent = right[index]!;
-    dot += leftComponent * rightComponent;
-    leftMagnitude += leftComponent * leftComponent;
-    rightMagnitude += rightComponent * rightComponent;
+    addComponent(sums, left[index]!, right[index]!);
   }
-  return { dot, leftMagnitude, rightMagnitude };
+  return sums;
+}
+
+function addComponent(sums: Sums, leftComponent: number, rightComponent: number): void {
+  sums.dot += leftComponent * rightComponent;
+  sums.leftMagnitude += leftComponent * leftComponent;
+  sums.rightMagnitude += rightComponent * rightComponent;
 }

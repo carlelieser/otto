@@ -39,20 +39,30 @@ export class LocalAdjudicator implements Adjudicator {
     const response = await this.#fetch(`${this.#options.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: this.#options.model,
-        messages: [{ role: "user", content: adjudicationPrompt(request) }],
-        temperature: 0,
-        response_format: { type: "json_object" },
-      }),
+      body: JSON.stringify(this.#body(request)),
     });
-    if (!response.ok) {
-      throw await providerFailure(
-        response,
-        `${LOCAL_ADJUDICATOR_PROVIDER} at ${this.#options.baseUrl}`,
-      );
-    }
-    return response.json();
+    if (response.ok) return response.json();
+    throw await providerFailure(
+      response,
+      `${LOCAL_ADJUDICATOR_PROVIDER} at ${this.#options.baseUrl}`,
+    );
+  }
+
+  /**
+   * The request body.
+   *
+   * Temperature 0, as everywhere on the write path, and `json_object` rather
+   * than a grammar: the answer is one number, so the shape a grammar would
+   * constrain is small enough that JSON mode covers it — and `parseChoice`
+   * treats anything unreadable as a decline rather than trusting the format.
+   */
+  #body(request: AdjudicationRequest): Record<string, unknown> {
+    return {
+      model: this.#options.model,
+      messages: [{ role: "user", content: adjudicationPrompt(request) }],
+      temperature: 0,
+      response_format: { type: "json_object" },
+    };
   }
 }
 

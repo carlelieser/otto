@@ -14,7 +14,11 @@ import {
   type SetFieldPayload,
 } from "../../domain/commands/knowledge-commands.js";
 import { type EntityType, findField } from "../../domain/schema/entity-schema.js";
-import { type FieldDefinition, isExtractable } from "../../domain/schema/field-types.js";
+import {
+  type DispositionFloor,
+  type FieldDefinition,
+  isExtractable,
+} from "../../domain/schema/field-types.js";
 import type { ClaimedValue } from "../../domain/knowledge/claimed-value.js";
 import { dependenciesOn, isDependencySatisfied } from "./dependent-fields.js";
 
@@ -84,23 +88,34 @@ export function diffEntity(current: Entity, claimed: readonly ClaimedValue[]): E
   const refused: RefusedValue[] = [];
 
   for (const value of claimed) {
-    const field = findField(current.type, value.field);
-    const refusal = refuse(field, value);
-    if (refusal !== undefined) {
-      refused.push(refusal);
-      continue;
-    }
-    changes.push(...changesFor(current, field!, value.value));
+    const accepted = accept(current, value);
+    if (accepted.field === null) refused.push(accepted.refusal);
+    else changes.push(...changesFor(current, accepted.field, value.value));
   }
 
   return { changes: [...changes, ...clearedDependents(current, changes)], refused };
 }
 
-/** Why this claimed value cannot be accepted, or `undefined` if it can. */
-function refuse(field: FieldDefinition | undefined, value: ClaimedValue): RefusedValue | undefined {
-  if (field === undefined) return { field: value.field, reason: "unknown_field" };
-  if (!isExtractable(field)) return { field: value.field, reason: "derived_field" };
-  return undefined;
+/**
+ * The field definition a claimed value may be applied through, or why it may
+ * not be.
+ *
+ * A discriminated result rather than a nullable field plus a separate check:
+ * the two outcomes are exclusive, and returning them as one value is what lets
+ * the caller use the definition without asserting it is there.
+ */
+type Acceptance =
+  { readonly field: FieldDefinition } | { readonly field: null; readonly refusal: RefusedValue };
+
+function accept(current: Entity, value: ClaimedValue): Acceptance {
+  const field = findField(current.type, value.field);
+  if (field === undefined) return refusal(value.field, "unknown_field");
+  if (!isExtractable(field)) return refusal(value.field, "derived_field");
+  return { field };
+}
+
+function refusal(field: string, reason: RefusalReason): Acceptance {
+  return { field: null, refusal: { field, reason } };
 }
 
 /**
@@ -116,14 +131,19 @@ function changesFor(
   field: FieldDefinition,
   value: EntityValue,
 ): readonly FieldChange[] {
-  if (field.cardinality === "set") {
-    const isPresent = valuesOf(current, field.name).some((held) => isSameValue(held, value));
-    return isPresent ? [] : [{ type: ADD_TO_SET, payload: { field: field.name, value } }];
-  }
+  if (isAlreadyHeld(current, field, value)) return [];
+  const payload = { field: field.name, value };
+  if (field.cardinality === "set") return [{ type: ADD_TO_SET, payload }];
+  return [{ type: SET_FIELD, payload }];
+}
 
+/** Whether the entity already holds this value for this field. */
+function isAlreadyHeld(current: Entity, field: FieldDefinition, value: EntityValue): boolean {
+  if (field.cardinality === "set") {
+    return valuesOf(current, field.name).some((held) => isSameValue(held, value));
+  }
   const held = singleValueOf(current, field.name);
-  const isUnchanged = held !== undefined && isSameValue(held, value);
-  return isUnchanged ? [] : [{ type: SET_FIELD, payload: { field: field.name, value } }];
+  return held !== undefined && isSameValue(held, value);
 }
 
 /**
@@ -164,6 +184,6 @@ function staleAfter(current: Entity, payload: SetFieldPayload): readonly FieldCh
  * to carry it, so a Proposal arrives at triage already knowing that a rename
  * never auto-applies.
  */
-export function floorFor(entityType: EntityType, fieldName: string): string | undefined {
+export function floorFor(entityType: EntityType, fieldName: string): DispositionFloor | undefined {
   return findField(entityType, fieldName)?.floor;
 }

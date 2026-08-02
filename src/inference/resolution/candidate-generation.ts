@@ -101,10 +101,22 @@ export async function generateCandidates(
     nearestOf(request, reads),
   ]);
 
+  return merge({ exact, fuzzy, near });
+}
+
+/** The three sources' hits, before merging. */
+interface SourceHits {
+  readonly exact: readonly Entity[];
+  readonly fuzzy: readonly Entity[];
+  readonly near: readonly NearEntity[];
+}
+
+/** One candidate per entity, carrying every source that found it. */
+function merge(hits: SourceHits): readonly Candidate[] {
   const merged = new Map<string, MutableCandidate>();
-  addAll(merged, exact, "alias");
-  addAll(merged, fuzzy, "fuzzy");
-  addNear(merged, near);
+  addAll(merged, hits.exact, "alias");
+  addAll(merged, hits.fuzzy, "fuzzy");
+  addNear(merged, hits.near);
   return [...merged.values()].map(toCandidate);
 }
 

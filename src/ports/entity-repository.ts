@@ -1,6 +1,7 @@
 import type { Entity } from "../domain/knowledge/entity.js";
 import type { Relation } from "../domain/knowledge/relation.js";
 import type { EntityType } from "../domain/schema/entity-schema.js";
+import type { NearEntity, NearestQuery } from "../inference/resolution/candidate-generation.js";
 
 /**
  * Projection reads per entity type, **read-only from `inference/`'s
@@ -58,30 +59,24 @@ export interface EntityRepository {
   relationsOf(entityId: string): Promise<readonly Relation[]>;
 }
 
-/** A nearest-neighbour search: the vector, the type to search within, and how many. */
-export interface EmbeddingQuery {
-  readonly embedding: Float32Array;
-  readonly type: EntityType;
-  readonly limit: number;
-}
-
-/** An entity and how near it was, in whatever metric the index uses. */
-export interface ScoredEntity {
-  readonly entity: Entity;
-  /** Cosine distance, so smaller is nearer. Zero is identical. */
-  readonly distance: number;
-}
-
 /**
- * A candidate entity and why it was proposed, defined by the stage that
- * produces it.
+ * The four types this port trades in, defined by the stage that consumes them.
  *
  * Re-exported here rather than redeclared. `inference/resolution/` owns the
- * shape because generation is what builds it, and this port is what feeds
- * generation — two declarations of one type are two things that can disagree,
+ * shapes because candidate generation is what asks these questions and builds
+ * the answers — two declarations of one type are two things that can disagree,
  * and the disagreement would be silent since both would typecheck.
  *
  * The direction is the one the layering permits: `ports/` may name a type from
  * `inference/`, and `inference/` may not name this port (`add.md` §3).
+ *
+ * `EmbeddingQuery` and `ScoredEntity` are this port's names for what generation
+ * calls `NearestQuery` and `NearEntity`. The aliases are kept because the two
+ * sides read differently — a repository is asked for the nearest embeddings, a
+ * scorer is handed near entities — and one declaration underneath is what stops
+ * that from becoming two shapes.
  */
 export type { Candidate, CandidateSource } from "../inference/resolution/candidate-generation.js";
+
+export type EmbeddingQuery = NearestQuery;
+export type ScoredEntity = NearEntity;

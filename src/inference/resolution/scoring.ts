@@ -12,9 +12,33 @@ import { nameSimilarity } from "./name-similarity.js";
  * can explain, which is what makes the number arguable — and a confidence
  * nobody can argue with is a confidence nobody can improve.
  *
- * The features are `add.md` §5.3's four: name similarity, co-occurrence with
- * other entities resolved in the same Capture, recency of contact, and type
- * agreement.
+ * ## The features, and where the fourth one went
+ *
+ * `add.md` §5.3 names four: name similarity, co-occurrence with other entities
+ * resolved in the same Capture, recency of contact, and **type agreement**.
+ * Three of them are scored below. Type agreement is not, and that is a
+ * deliberate substitution rather than an omission.
+ *
+ * Type agreement is enforced **as a filter rather than as a feature**: every
+ * candidate source in `candidate-generation.ts` is asked for one entity type,
+ * so a candidate of the wrong type is never generated and there is nothing for
+ * a feature to disagree with. Scoring it would be scoring a constant — every
+ * candidate would score 1, contributing nothing but a weight taken from the
+ * features that discriminate.
+ *
+ * The trade is a real one and worth naming: a filter cannot be outvoted. A note
+ * saying "Helios" where Helios is recorded as a Project and the extractor
+ * called it an Event finds no candidate at all and creates a duplicate, where a
+ * *feature* would have let the other three signals carry it. That is the
+ * conservative direction — a duplicate is recoverable by merge and a
+ * cross-type match is a misattribution (ADR-0009) — and it is the eval set's
+ * `missed_match` count that would show it becoming a problem.
+ *
+ * `sourceAgreement` takes the fourth slot, and it is not in §5.3's list. How
+ * many of the three independent generators found a candidate is the cheapest
+ * evidence available, and it only exists because candidate generation has three
+ * sources — which §5.3 specifies but was written before the scorer had them to
+ * read.
  */
 
 /** What the scorer knows about the Mention and the Capture it came from. */

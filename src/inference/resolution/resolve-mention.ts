@@ -90,21 +90,22 @@ export interface Resolution {
  */
 export function resolveFromScores(candidates: readonly ScoredCandidate[]): Resolution {
   const best = candidates[0];
-  if (best === undefined) return NOTHING_FOUND;
+  if (best === undefined || best.score < PLAUSIBILITY_FLOOR) return NOTHING_FOUND;
 
   const margin = marginOf(candidates);
-  if (best.score < PLAUSIBILITY_FLOOR) return NOTHING_FOUND;
-  if (best.score < MATCH_FLOOR) {
-    return {
-      outcome: "rejected_candidates",
-      entityId: null,
-      confidence: margin,
-      isAmbiguous: false,
-    };
-  }
+  if (best.score < MATCH_FLOOR) return rejectedCandidates(margin);
+  return matched(best.candidate.entity.id, margin);
+}
+
+/** Plausible candidates existed and none was good enough: the review path. */
+function rejectedCandidates(margin: number): Resolution {
+  return { outcome: "rejected_candidates", entityId: null, confidence: margin, isAmbiguous: false };
+}
+
+function matched(entityId: string, margin: number): Resolution {
   return {
     outcome: "matched",
-    entityId: best.candidate.entity.id,
+    entityId,
     confidence: margin,
     isAmbiguous: margin < AMBIGUITY_MARGIN,
   };

@@ -127,6 +127,37 @@ describe("candidate generation", () => {
     expect(requestedLimit).toBe(20);
   });
 
+  /**
+   * Type agreement is enforced here as a **filter**, which is why the scorer
+   * has no `typeAgreement` feature — every candidate that reaches it already
+   * agrees, so scoring it would score a constant (`scoring.ts`).
+   *
+   * The consequence is worth pinning: all three sources are asked for one type,
+   * so a candidate of another type is never generated. A feature could be
+   * outvoted by the other signals; a filter cannot.
+   */
+  it("asks every source for the Mention's type, so no other type is generated", async () => {
+    const asked: string[] = [];
+    const reads: CandidateReads = {
+      byExactName: async (_name, type) => {
+        asked.push(type);
+        return [];
+      },
+      byFuzzyName: async (_name, type) => {
+        asked.push(type);
+        return [];
+      },
+      byNearestEmbedding: async (query) => {
+        asked.push(query.type);
+        return [];
+      },
+    };
+
+    await generateCandidates({ ...A_MENTION, embedding: AN_EMBEDDING }, reads);
+
+    expect(asked).toEqual(["Person", "Person", "Person"]);
+  });
+
   it("searches for the type the Mention claims", async () => {
     let searchedType = "";
     const reads: CandidateReads = {
