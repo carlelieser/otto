@@ -35,9 +35,36 @@ describe("SQLite refuses mutation at the database level", () => {
        '2026-08-01T09:00:00Z')`,
   ];
 
+  /**
+   * The same values the seeds insert, as a replace targeting the seeded key.
+   *
+   * A replace has to name every column, since the row it writes is a new one
+   * rather than an edit of the old — which is the property that makes it slip
+   * past an UPDATE trigger in the first place.
+   */
+  const EVENT_COLUMNS = `(
+       event_id, type, version, aggregate_type, aggregate_id, aggregate_version,
+       payload, proposal_id, capture_id, provider, model_version,
+       confidence, is_human_confirmed, recorded_at
+     ) VALUES ('evt-1', 'Tampered', 1, 'Capture', 'cap-1', 0,
+       '{"tampered":true}', 'prop-1', 'cap-1', 'local', 'qwen2.5-7b', 0.9, 0,
+       '2026-08-01T09:00:00Z')`;
+
+  const CAPTURE_COLUMNS = `(capture_id, source, raw_text, source_timestamp, content_hash, ingested_at)
+     VALUES ('cap-1', 'typed', 'tampered', '2026-08-01T09:00:00Z',
+       '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+       '2026-08-01T09:00:00Z')`;
+
+  /**
+   * Built through `openDatabase` rather than from `CREATE_SCHEMA` alone.
+   *
+   * The schema declares the triggers; the connection is what makes them fire on
+   * every path that mutates a row, including the replace one. A test that
+   * applied the schema by hand would assert the half that is in SQL and miss
+   * the half that is a pragma.
+   */
   function seededDatabase(): Database.Database {
-    database = new Database(":memory:");
-    database.exec(CREATE_SCHEMA);
+    database = openDatabase();
     for (const row of SEED_ROWS) database.prepare(row).run();
     return database;
   }
@@ -57,6 +84,29 @@ describe("SQLite refuses mutation at the database level", () => {
   it.each(["events", "captures"])("rejects DELETE on %s", (table) => {
     const seeded = seededDatabase();
     expect(() => seeded.prepare(`DELETE FROM ${table}`).run()).toThrow(/append-only/);
+  });
+
+  /**
+   * The hole `INSERT OR REPLACE` opens, closed rather than left to convention.
+   *
+   * A replace is a delete followed by an insert, and SQLite runs neither the
+   * UPDATE nor the DELETE trigger on that path unless `recursive_triggers` is
+   * on. So the two triggers above are satisfied by a statement that overwrites
+   * the row anyway — which is exactly the mutation they exist to refuse, and
+   * exactly the statement a correction path is tempted to reach for when it
+   * needs `corrected_text` written to a table that will not take an UPDATE.
+   *
+   * Slice 9 re-verifies this pair because it is the first slice with a reason
+   * to write that column. The answer is that it never writes it: the event is
+   * truth, and `openDatabase` closes the replace path so the temptation fails
+   * loudly rather than quietly succeeding.
+   */
+  it.each(["events", "captures"])("rejects INSERT OR REPLACE on %s", (table) => {
+    const seeded = seededDatabase();
+    const columns = table === "events" ? EVENT_COLUMNS : CAPTURE_COLUMNS;
+    expect(() => seeded.prepare(`INSERT OR REPLACE INTO ${table} ${columns}`).run()).toThrow(
+      /append-only/,
+    );
   });
 
   it("rejects an in-place payload edit", () => {
