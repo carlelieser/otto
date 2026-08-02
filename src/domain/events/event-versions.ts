@@ -1,4 +1,5 @@
 import { CAPTURE_INGESTED, CAPTURE_INGESTED_VERSION } from "./capture-ingested.js";
+import { KNOWLEDGE_EVENT_TYPES, KNOWLEDGE_EVENT_VERSION } from "./knowledge-events.js";
 import { identityUpcast, UpcastRegistry, type UpcastEntry } from "./upcast-registry.js";
 
 /**
@@ -13,11 +14,17 @@ import { identityUpcast, UpcastRegistry, type UpcastEntry } from "./upcast-regis
  */
 export const UPCASTS: readonly UpcastEntry[] = [
   { type: CAPTURE_INGESTED, fromVersion: 1, upcast: identityUpcast },
+  ...KNOWLEDGE_EVENT_TYPES.map((type) => ({
+    type,
+    fromVersion: KNOWLEDGE_EVENT_VERSION,
+    upcast: identityUpcast,
+  })),
 ];
 
 /** The version each event type's payload is currently written at. */
 export const CURRENT_VERSIONS: ReadonlyMap<string, number> = new Map([
   [CAPTURE_INGESTED, CAPTURE_INGESTED_VERSION],
+  ...KNOWLEDGE_EVENT_TYPES.map((type) => [type, KNOWLEDGE_EVENT_VERSION] as const),
 ]);
 
 /** The registry every read path upcasts through. */

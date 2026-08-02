@@ -78,6 +78,25 @@ const REFUSED_MUTATIONS = [
  * `schema.md` does, which is the coupling `entity-schema.ts` exists to keep in
  * one place.
  *
+ * ## `proposal_dispositions` has no triggers either, and needs a delete path
+ *
+ * Slice 5 adds triage's decision about each Proposal. It is derived state for
+ * the same reason `extraction_proposals` is (ADR-0019) — re-triaging a Proposal
+ * against the same thresholds reproduces it — so it carries no immutability
+ * triggers.
+ *
+ * It goes further: this is the first table in Otto that *must* be able to
+ * delete. Discards are retained for thirty days and then are not
+ * (`triage.md` §7), so triggers here would forbid the window they would look
+ * like they were protecting. It is deliberately not `projection_`-prefixed,
+ * because it is not rebuildable from the log alone: a discard never becomes an
+ * event, so the log has no record of it to rebuild from.
+ *
+ * `expires_at` is precomputed at write time and `NULL` for anything that is not
+ * a discard. The alternative is date arithmetic in the retention query, which
+ * would restate a domain rule (`domain/policies/retention.ts`) in SQL where
+ * nothing checks it against the original.
+ *
  * ## The `projection_` prefix is load-bearing
  *
  * Slice 4 adds the entity projection, and `add.md` §10 asks for exactly this:
@@ -148,6 +167,16 @@ CREATE TABLE IF NOT EXISTS extraction_proposals (
   extracted_at        TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS proposal_dispositions (
+  proposal_id         TEXT PRIMARY KEY,
+  capture_id          TEXT NOT NULL,
+  disposition         TEXT NOT NULL,
+  confidence          REAL NOT NULL,
+  was_sampled         INTEGER NOT NULL,
+  decided_at          TEXT NOT NULL,
+  expires_at          TEXT
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS projection_entities (
   entity_id           TEXT PRIMARY KEY,
   entity_type         TEXT NOT NULL,
@@ -181,6 +210,8 @@ CREATE TABLE IF NOT EXISTS projection_embeddings (
 CREATE INDEX IF NOT EXISTS events_by_aggregate ON events (aggregate_id, aggregate_version);
 CREATE INDEX IF NOT EXISTS events_by_capture ON events (capture_id);
 CREATE INDEX IF NOT EXISTS proposals_by_capture ON extraction_proposals (capture_id, ordinal);
+CREATE INDEX IF NOT EXISTS dispositions_by_capture ON proposal_dispositions (capture_id);
+CREATE INDEX IF NOT EXISTS discards_by_expiry ON proposal_dispositions (disposition, expires_at);
 CREATE INDEX IF NOT EXISTS entities_by_type ON projection_entities (entity_type, name);
 CREATE INDEX IF NOT EXISTS aliases_by_alias ON projection_aliases (alias);
 CREATE INDEX IF NOT EXISTS relations_by_from ON projection_relations (from_id);

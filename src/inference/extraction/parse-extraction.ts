@@ -91,21 +91,31 @@ function readEntityType(mention: RawMention, violations: ViolationLog): EntityTy
   return null;
 }
 
+/** The range a self-report is clamped into: a probability, whatever it claims. */
+const CONFIDENCE_RANGE = { minimum: 0, maximum: 1 } as const;
+
 /**
  * The model's self-report, clamped into [0, 1].
  *
  * Clamped rather than rejected because it is not a probability — ADR-0006's
  * argument is that it is a token distribution — so a model reporting 1.2 has
- * said "very confident" in a malformed way rather than said nothing. Slice 5
+ * said "very confident" in a malformed way rather than said nothing. Triage
  * treats it as a floor, and a floor outside its range would silently disable
- * the threshold it feeds. A non-numeric value becomes the neutral midpoint,
- * which routes to review rather than to auto-apply.
+ * the threshold it feeds.
+ *
+ * A non-numeric value becomes the midpoint of the unit interval, which is a
+ * statement about a missing self-report rather than about a band edge. It is
+ * deliberately *not* written as the discard threshold even though the two
+ * currently coincide: the thresholds are measured values that will move
+ * (`thresholds.ts`), and a model that said nothing about its own confidence
+ * should not start being discarded because a calibration run nudged 0.50
+ * upward.
  */
-const UNSTATED_CONFIDENCE = 0.5;
+const UNSTATED_CONFIDENCE = (CONFIDENCE_RANGE.minimum + CONFIDENCE_RANGE.maximum) / 2;
 
 function clampConfidence(raw: unknown): number {
   if (typeof raw !== "number" || Number.isNaN(raw)) return UNSTATED_CONFIDENCE;
-  return Math.min(1, Math.max(0, raw));
+  return Math.min(CONFIDENCE_RANGE.maximum, Math.max(CONFIDENCE_RANGE.minimum, raw));
 }
 
 interface FieldContext {

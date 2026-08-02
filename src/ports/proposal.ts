@@ -1,4 +1,5 @@
 import type { Command } from "../domain/commands/command.js";
+import type { EntityType } from "../domain/schema/entity-schema.js";
 import type { ResolutionOutcome } from "../inference/resolution/resolve-mention.js";
 
 /**
@@ -39,8 +40,34 @@ export interface Proposal {
   readonly confidences: SeparateConfidences;
   /** How resolution reached its decision, which triage's `create` rule reads. */
   readonly resolution: ResolutionSummary;
+  /**
+   * The entity type the Command targets, which triage reads the per-field
+   * disposition floor off `schema.md` with.
+   *
+   * The Command names an aggregate *id*, and a floor is a property of a field
+   * on a *type* — so without this, triage would have to load the entity to find
+   * out what kind of thing it is, and `inference/` may not reach for a
+   * repository (ADR-0003). The differ already knows the type at the moment it
+   * builds the Command, so carrying it costs nothing and keeps triage pure.
+   */
+  readonly entityType: EntityType;
+  /** The model that produced it. Thresholds and bootstrap key on this pair. */
+  readonly model: ModelIdentity;
   /** When the Proposal was computed, ISO 8601. */
   readonly proposedAt: string;
+}
+
+/**
+ * The provider and model version a Proposal was produced under (ADR-0008).
+ *
+ * On the Proposal rather than looked up at triage time, because a Proposal that
+ * sat in the review queue for three days is triaged against **its own** model's
+ * thresholds and not against whichever model happens to be configured when it
+ * comes back up.
+ */
+export interface ModelIdentity {
+  readonly provider: string;
+  readonly modelVersion: string;
 }
 
 /**

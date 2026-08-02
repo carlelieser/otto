@@ -1,26 +1,24 @@
 import type Database from "better-sqlite3";
 import { CAPTURE_TRANSLATORS } from "./application/pipeline/capture-translators.js";
-import { Executor } from "./application/pipeline/execute-command.js";
+import { KNOWLEDGE_TRANSLATORS } from "./application/pipeline/knowledge-translators.js";
+import { type CommandTranslator, Executor } from "./application/pipeline/execute-command.js";
 import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";
-import {
-  AnthropicExtractor,
-  ANTHROPIC_PROVIDER,
-} from "./infrastructure/llm/anthropic-extractor.js";
-import { LOCAL_PROVIDER, LocalExtractor } from "./infrastructure/llm/local-extractor.js";
-import { OPENAI_PROVIDER, OpenAiExtractor } from "./infrastructure/llm/openai-extractor.js";
+import { createExtractor, type ExtractionOptions } from "./composition/extractor-selection.js";
 import { SqliteCaptureStore } from "./infrastructure/persistence/sqlite-capture-store.js";
 import { SqliteEventStore } from "./infrastructure/persistence/sqlite-event-store.js";
 import { SqliteEntityRepository } from "./infrastructure/persistence/sqlite-entity-repository.js";
 import { SqliteProposalStore } from "./infrastructure/persistence/sqlite-proposal-store.js";
+import { SqliteDispositionStore } from "./infrastructure/persistence/sqlite-disposition-store.js";
 import { LocalEmbedder } from "./infrastructure/embedding/local-embedder.js";
 import { LocalAdjudicator } from "./infrastructure/llm/local-adjudicator.js";
 import { WhisperCliTranscriber } from "./infrastructure/transcription/whisper-cli-transcriber.js";
 import type { CandidateReads } from "./inference/resolution/candidate-generation.js";
 import type { Adjudicator } from "./ports/adjudicator.js";
 import type { CaptureStore } from "./ports/capture-store.js";
+import type { DispositionStore } from "./ports/disposition-store.js";
 import type { Embedder } from "./ports/embedder.js";
 import type { EventStore } from "./ports/event-store.js";
 import type { Extractor } from "./ports/extractor.js";
@@ -73,6 +71,15 @@ export interface Storage {
    */
   readonly proposals: ProposalStore;
   /**
+   * Triage's decision about each Proposal, and the only place a discard is
+   * visible from (`triage.md` §7).
+   *
+   * On the same connection as the rest for the same reason: the pipeline is
+   * serialised to one Capture at a time, so one writer is a property of the
+   * design rather than a constraint WAL imposes on it.
+   */
+  readonly dispositions: DispositionStore;
+  /**
    * The entity projection resolution reads current knowledge through.
    *
    * On the same connection as the rest, and derived rather than truth — every
@@ -92,6 +99,7 @@ export function createStorage(options: StorageOptions = {}): Storage {
     events: new SqliteEventStore(database),
     captures: new SqliteCaptureStore(database),
     proposals: new SqliteProposalStore(database),
+    dispositions: new SqliteDispositionStore(database),
     entities: new SqliteEntityRepository(database),
     close: () => database.close(),
   };
@@ -183,81 +191,12 @@ export function createTranscriber(options: TranscriptionOptions = {}): Transcrib
 }
 
 /**
- * How extraction is configured. Every field is optional, and that is the
- * decision rather than an ergonomic detail: Otto is fully functional before any
- * provider is configured (ADR-0016).
- */
-export interface ExtractionOptions {
-  /**
-   * Which provider satisfies the `Extractor` port. Per port rather than global,
-   * because a user may want cloud extraction and local adjudication.
-   *
-   * Read from the environment when absent, and `local` when that is absent too.
-   */
-  readonly provider?: string;
-  readonly model?: string;
-  /** The local runtime's OpenAI-compatible base URL. */
-  readonly baseUrl?: string;
-  /** The cloud provider's key. Absent is the ordinary case, not an error. */
-  readonly apiKey?: string;
-}
-
-/**
- * The extractor, defaulting to the local path.
+ * Re-exported so callers keep one import path for wiring.
  *
- * **The unconfigured state is the primary configuration, not an edge case**
- * (`qa.md` §6.3, ADR-0016). Nothing here throws when no provider is named and
- * no key is present: that path returns the local adapter, which is what Otto
- * runs out of the box.
- *
- * Removing a previously-configured provider therefore leaves Otto functional
- * rather than stalled — the environment stops naming a provider and this falls
- * back, which is a different outcome from "captures accumulate" because nothing
- * is unavailable.
+ * The selection logic lives in `composition/extractor-selection.ts`; that it
+ * moved is not something a caller of the root should have to notice.
  */
-export function createExtractor(options: ExtractionOptions = {}): Extractor {
-  const provider = options.provider ?? process.env.OTTO_EXTRACTION_PROVIDER ?? LOCAL_PROVIDER;
-  const apiKey = options.apiKey ?? cloudKeyFor(provider);
-  if (provider === LOCAL_PROVIDER || apiKey === undefined) return createLocalExtractor(options);
-  return createCloudExtractor(provider, apiKey, options);
-}
-
-function createLocalExtractor(options: ExtractionOptions): Extractor {
-  const baseUrl = options.baseUrl ?? process.env.OTTO_LOCAL_BASE_URL;
-  const model = options.model ?? process.env.OTTO_LOCAL_MODEL;
-  return new LocalExtractor({
-    ...(baseUrl === undefined ? {} : { baseUrl }),
-    ...(model === undefined ? {} : { model }),
-  });
-}
-
-/**
- * A named cloud provider, or the local path when the name is not one Otto has
- * an adapter for.
- *
- * An unrecognised provider name falls back rather than throwing, for the reason
- * ADR-0016 gives: a typo in a configuration file should degrade to the default
- * Otto is built to run on, not stop the pipeline. The provider is recorded on
- * every Proposal, so which adapter actually ran stays answerable afterwards.
- */
-function createCloudExtractor(
-  provider: string,
-  apiKey: string,
-  options: ExtractionOptions,
-): Extractor {
-  const model = options.model;
-  const settings = { apiKey, ...(model === undefined ? {} : { model }) };
-  if (provider === ANTHROPIC_PROVIDER) return new AnthropicExtractor(settings);
-  if (provider === OPENAI_PROVIDER) return new OpenAiExtractor(settings);
-  return createLocalExtractor(options);
-}
-
-/** The key a cloud provider reads, or `undefined` when it is not configured. */
-function cloudKeyFor(provider: string): string | undefined {
-  if (provider === ANTHROPIC_PROVIDER) return process.env.ANTHROPIC_API_KEY;
-  if (provider === OPENAI_PROVIDER) return process.env.OPENAI_API_KEY;
-  return undefined;
-}
+export { createExtractor, type ExtractionOptions };
 
 /** The extraction stage, wired to storage and an extractor. */
 export function createExtraction(
@@ -282,9 +221,23 @@ export function createRecovery(storage: Storage, ingestion: CaptureIngestion): C
   return new CaptureRecovery(storage.captures, ingestion);
 }
 
+/**
+ * Every Command the executor understands: Captures and knowledge.
+ *
+ * Two maps merged rather than one growing map, because they arrived with
+ * different stages and answer to different documents — ingestion's is `add.md`
+ * §5.1, and the knowledge ones are §5.4's closed vocabulary. Merged here, in
+ * the composition root, because assembling the whole from its parts is what
+ * this module is for.
+ */
+export const ALL_TRANSLATORS: ReadonlyMap<string, CommandTranslator> = new Map([
+  ...CAPTURE_TRANSLATORS,
+  ...KNOWLEDGE_TRANSLATORS,
+]);
+
 /** The executor, wired to a store. The clock is injected so tests can pin it. */
 export function createExecutor(store: EventStore, now: () => string = defaultClock): Executor {
-  return new Executor(store, CAPTURE_TRANSLATORS, now);
+  return new Executor(store, ALL_TRANSLATORS, now);
 }
 
 function defaultClock(): string {
