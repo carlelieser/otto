@@ -66,6 +66,14 @@ export class LocalExtractor implements Extractor {
    * decoding — which the parser then catches as schema violations rather than
    * as corrupt knowledge, and which the eval set's zero-tolerance violation
    * rate makes visible immediately.
+   *
+   * TODO: LMStudio ignores `grammar` and answers in prose, so every local
+   * extraction fails to parse and the default path yields nothing. Request
+   * structured output as `response_format` with a JSON schema where the
+   * runtime reads that, keeping GBNF for runtimes that read it instead.
+   * Which one a runtime honours is not detectable from the response — both
+   * return 200 — so the negotiation belongs in an ADR beside ADR-0016. Slice
+   * 3's measurement cannot run until this lands.
    */
   #body(request: ExtractionRequest): Record<string, unknown> {
     return {
