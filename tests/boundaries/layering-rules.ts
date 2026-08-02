@@ -17,6 +17,26 @@ export interface LayeringRule {
 /** The one module permitted to import `infrastructure/` (ADR-0001). */
 export const COMPOSITION_ROOT = "composition-root.ts";
 
+/**
+ * Modules the root delegates wiring to, which share its exemption.
+ *
+ * ADR-0001's rule is that **one place assembles infrastructure**, not that one
+ * *file* does. The root outgrew a readable length, and the honest split is by
+ * what the code does rather than by moving a boundary: extractor selection is
+ * the one wiring question with real branching in it (ADR-0016's fallbacks), so
+ * it moved here while the rest of the root stayed constructor calls.
+ *
+ * The namespace is deliberately narrow and named. A rule of "anything under
+ * `composition/`" is still one boundary a reader can check in one place, which
+ * a growing list of individually-exempted files would not be.
+ */
+export const COMPOSITION_NAMESPACE = "composition/";
+
+/** Whether this module is inside the boundary permitted to wire infrastructure. */
+export function isCompositionModule(path: string): boolean {
+  return path === COMPOSITION_ROOT || path.startsWith(COMPOSITION_NAMESPACE);
+}
+
 const FORBIDDEN_TO_INFERENCE = ["ports/event-store", "ports/capture-store", "application/"];
 
 function isRepositoryPort(specifier: string): boolean {
@@ -44,7 +64,7 @@ export const IMPORT_RULES: readonly LayeringRule[] = [
     // An infrastructure module importing its siblings is internal cohesion,
     // not a layering violation; the rule is about who reaches *into* the layer.
     name: "only the composition root imports infrastructure/",
-    appliesTo: (path) => path !== COMPOSITION_ROOT && !path.startsWith("infrastructure/"),
+    appliesTo: (path) => !isCompositionModule(path) && !path.startsWith("infrastructure/"),
     forbids: (specifier, from) => resolveSpecifier(specifier, from).startsWith("infrastructure/"),
   },
 ];

@@ -59,7 +59,7 @@ describe("re-proposal re-enters from the differ", () => {
 
     expect(outcome.kind).toBe("changed");
     if (outcome.kind !== "changed") return;
-    expect(outcome.proposal.command.aggregate.expectedVersion).toBe(7);
+    expect(outcome.proposals[0]?.command.aggregate.expectedVersion).toBe(7);
   });
 });
 
@@ -115,6 +115,52 @@ describe("what the re-proposal produces", () => {
 
       expect(outcome.kind === "changed" && outcome.disposition).toBe("needs_review");
     }
+  });
+
+  /**
+   * A re-diff can imply more than one change, and dropping the extra ones is
+   * silent in the worst way: `schema.md` §4 has `blocker` cleared by a status
+   * change away from `blocked`, so keeping only the first change would leave a
+   * Project unblocked with the stale reason it was blocked still attached.
+   */
+  it("carries every change a re-diff implies, not just the first", async () => {
+    const blocked = anEntity({
+      id: "prj-helios",
+      type: "Project",
+      version: 4,
+      fields: { status: ["blocked"], blocker: ["waiting on legal"] },
+    });
+
+    const outcome = await reproposeAgainst(aStaleProposal(), {
+      current: blocked,
+      claimed: [{ field: "status", value: "active" }],
+    });
+
+    expect(outcome.kind).toBe("changed");
+    if (outcome.kind !== "changed") return;
+    const changed = outcome.proposals.map((p) => p.command.payload);
+    expect(changed).toContainEqual({ field: "status", value: "active" });
+    expect(changed).toContainEqual({ field: "blocker", because: "status" });
+  });
+
+  /** Every re-proposal in a multi-change set is stamped against current state. */
+  it("stamps every carried change with the current version", async () => {
+    const blocked = anEntity({
+      id: "prj-helios",
+      type: "Project",
+      version: 9,
+      fields: { status: ["blocked"], blocker: ["waiting on legal"] },
+    });
+
+    const outcome = await reproposeAgainst(aStaleProposal(), {
+      current: blocked,
+      claimed: [{ field: "status", value: "active" }],
+    });
+
+    expect(outcome.kind).toBe("changed");
+    if (outcome.kind !== "changed") return;
+    const versions = outcome.proposals.map((p) => p.command.aggregate.expectedVersion);
+    expect(new Set(versions)).toEqual(new Set([9]));
   });
 
   /** A target that vanished cannot be re-proposed against anything. */

@@ -1,17 +1,6 @@
 import {
-  ADD_TO_SET,
-  CLEAR_FIELD,
-  CREATE_ENTITY,
-  RELATE,
-  SET_FIELD,
-} from "../../domain/commands/knowledge-commands.js";
-import {
-  ENTITIES_RELATED,
-  ENTITY_CREATED,
-  FIELD_CLEARED,
-  FIELD_SET,
+  EVENT_FOR_COMMAND,
   KNOWLEDGE_EVENT_VERSION,
-  SET_MEMBER_ADDED,
 } from "../../domain/events/knowledge-events.js";
 import type { CommandTranslator } from "./execute-command.js";
 
@@ -33,16 +22,10 @@ import type { CommandTranslator } from "./execute-command.js";
  * (`triage.md` §8).
  */
 export const KNOWLEDGE_TRANSLATORS: ReadonlyMap<string, CommandTranslator> = new Map(
-  [
-    [CREATE_ENTITY, ENTITY_CREATED],
-    [SET_FIELD, FIELD_SET],
-    [ADD_TO_SET, SET_MEMBER_ADDED],
-    [CLEAR_FIELD, FIELD_CLEARED],
-    [RELATE, ENTITIES_RELATED],
-  ].map(([commandType, eventType]) => [
-    commandType!,
+  Object.entries(EVENT_FOR_COMMAND).map(([commandType, eventType]) => [
+    commandType,
     (command) => ({
-      type: eventType!,
+      type: eventType,
       version: KNOWLEDGE_EVENT_VERSION,
       payload: command.payload,
     }),

@@ -116,7 +116,9 @@ export class CaptureTriage {
    */
   async #applyConfident(triaged: readonly TriagedProposal[]): Promise<readonly Proposal[]> {
     const confident = triaged.filter((decision) => decision.disposition === "auto_apply");
-    const outcomes = await Promise.all(confident.map((d) => this.#applyOne(d.proposal)));
+    const outcomes = await Promise.all(
+      confident.map((decision) => this.#applyOne(decision.proposal)),
+    );
     return outcomes.filter((proposal): proposal is Proposal => proposal !== undefined);
   }
 
