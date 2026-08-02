@@ -1,6 +1,8 @@
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import {
+  createExtraction,
+  createExtractor,
   createIngestion,
   createRecovery,
   createStorage,
@@ -48,10 +50,18 @@ async function startCaptureSidecar(): Promise<void> {
   const storage = createStorage(databaseFile === undefined ? {} : { databaseFile });
   const ingestion = createIngestion(storage);
   await createRecovery(storage, ingestion).recoverUningestedCaptures();
+  // `createExtractor` reads the environment and falls back to the local path,
+  // so an unconfigured sidecar starts and serves rather than refusing to boot
+  // (ADR-0016). Nothing here checks for a key.
   await runSidecar(
     process.stdin,
     process.stdout,
-    sidecarMethods({ ingestion, transcriber: createTranscriber() }),
+    sidecarMethods({
+      ingestion,
+      transcriber: createTranscriber(),
+      extraction: createExtraction(storage, createExtractor()),
+      captures: storage.captures,
+    }),
   );
 }
 
