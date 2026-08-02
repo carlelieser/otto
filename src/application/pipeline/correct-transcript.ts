@@ -45,6 +45,20 @@ export interface CorrectionDependencies {
    * was always version 0 of a new aggregate.
    */
   readonly currentVersionOf: (aggregateId: string) => Promise<number>;
+  /**
+   * Rebuilds the Capture full-text index, which is derived from `captures`
+   * rather than folded from the log.
+   *
+   * A correction changes the text that index holds, and no event carries a
+   * Capture's text for the projection worker to fold — so without this, the
+   * corrected transcript stays unsearchable until the next rebuild and search
+   * keeps returning the misheard text as though nothing happened.
+   *
+   * Optional so the stage stays constructible without a projection store. A
+   * test about the append path has no index to maintain and should not have to
+   * build one to say so.
+   */
+  readonly reindexCaptures?: () => Promise<void>;
   readonly now: Clock;
 }
 
@@ -81,7 +95,9 @@ export class TranscriptCorrection {
   async correct(captureId: string, correctedText: string): Promise<Capture> {
     const capture = await this.#correctable(captureId, correctedText);
     await this.#dependencies.executor.execute(await this.#commandFor(capture, correctedText));
-    return this.#dependencies.captures.recordCorrection(captureId, correctedText);
+    const corrected = await this.#dependencies.captures.recordCorrection(captureId, correctedText);
+    await this.#dependencies.reindexCaptures?.();
+    return corrected;
   }
 
   /** The Capture, if there is one and it is the kind that can be corrected. */

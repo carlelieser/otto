@@ -126,6 +126,26 @@ describe("the sidecar's correction method", () => {
     expect(response).toMatchObject({ result: { emerged: [] } });
   });
 
+  /**
+   * The Capture index is built from `captures` rather than folded from the log,
+   * because no event carries a Capture's text. `reset` and a rebuild put it
+   * back — but a correction is neither, so without reindexing here the
+   * corrected transcript stays unsearchable until the next rebuild, and search
+   * keeps returning the misheard text as though nothing happened.
+   */
+  it("makes the corrected text searchable rather than the misheard text", async () => {
+    const capture = await aVoiceCapture();
+    await storage.projections.reindexCaptures();
+
+    await call(sidecar(), "correctTranscript", {
+      captureId: capture.captureId,
+      correctedText: CORRECTED,
+    });
+
+    expect(await storage.views.searchCaptures("Sarah")).toHaveLength(1);
+    expect(await storage.views.searchCaptures("Sara")).toHaveLength(0);
+  });
+
   it("refuses to correct a typed Capture", async () => {
     const typed = await createIngestion(storage, () => AT).ingest({
       source: "typed",

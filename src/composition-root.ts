@@ -301,6 +301,7 @@ export function createCorrection(
     captures: storage.captures,
     executor: createExecutor(storage.events, now),
     currentVersionOf: (aggregateId) => storage.events.currentVersion(aggregateId),
+    reindexCaptures: () => storage.projections.reindexCaptures(),
     now,
   });
 }
