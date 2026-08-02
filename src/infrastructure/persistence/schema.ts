@@ -126,6 +126,15 @@ const REFUSED_MUTATIONS = [
  * written — the spike used a `sqlite-vec` virtual table and that is a different
  * project. Float32, since quantization trades recall for a resource Otto is not
  * short of at 3,000 entities.
+ *
+ * ## The tables Slice 6 adds are documented with the list that clears them
+ *
+ * `projection_field_provenance`, `projection_redirects`, `projection_position`,
+ * and the two `fts5` search tables are declared below and explained in
+ * `projection-tables.ts`, alongside the list a rebuild empties. Keeping the
+ * reasoning next to that list is what makes the two hard to get out of step:
+ * a `projection_` table missing from it survives a rebuild and quietly becomes
+ * a second truth.
  */
 export const CREATE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS captures (
@@ -206,6 +215,45 @@ CREATE TABLE IF NOT EXISTS projection_embeddings (
   embedding           BLOB NOT NULL,
   model_version       TEXT NOT NULL
 ) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_field_provenance (
+  entity_id           TEXT NOT NULL,
+  field               TEXT NOT NULL,
+  event_id            TEXT NOT NULL,
+  proposal_id         TEXT,
+  capture_id          TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  model_version       TEXT NOT NULL,
+  confidence          REAL,
+  is_human_confirmed  INTEGER NOT NULL,
+  recorded_at         TEXT NOT NULL,
+  PRIMARY KEY (entity_id, field)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_redirects (
+  from_id             TEXT PRIMARY KEY,
+  to_id               TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_position (
+  projection_name     TEXT PRIMARY KEY,
+  position            INTEGER NOT NULL,
+  is_rebuilding       INTEGER NOT NULL,
+  updated_at          TEXT NOT NULL
+) STRICT;
+
+CREATE VIRTUAL TABLE IF NOT EXISTS projection_capture_search USING fts5 (
+  capture_id UNINDEXED,
+  text,
+  tokenize = 'unicode61'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS projection_entity_search USING fts5 (
+  entity_id UNINDEXED,
+  entity_type UNINDEXED,
+  text,
+  tokenize = 'unicode61'
+);
 
 CREATE INDEX IF NOT EXISTS events_by_aggregate ON events (aggregate_id, aggregate_version);
 CREATE INDEX IF NOT EXISTS events_by_capture ON events (capture_id);

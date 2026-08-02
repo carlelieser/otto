@@ -1,0 +1,11 @@
+{
+  "measurement": "text-to-durable-capture",
+  "what_is_timed": "Normalise, derive the capture id, write the `captures` row, and append CaptureIngested through the executor, against SQLite in memory. Excludes the hotkey, the window, and the WebView, which runtime-latency.json covers.",
+  "runs": 200,
+  "median_ms": 0.087708,
+  "p95_ms": 0.120458,
+  "bar_ms": 50,
+  "machine": "arm64",
+  "os": "darwin",
+  "excluded": "Transcription, which is measured as a multiple of realtime rather than a fixed budget (`runtime.md` §2), and the host-side hotkey and window."
+}

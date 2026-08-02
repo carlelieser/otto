@@ -21,9 +21,25 @@ collapse; the baseline catches the drift that gets you there.
   extension §4.3 named nor the implementation ADR-0021 settled on. Written by
   `npm run test:local` and committed, because the machine is recorded with it.
 
-  **It is the tightest margin in the suite** — 13.8 ms against a 100 ms bar,
-  where every other row passes by 20× or better — so it is the row that moves
-  first. The scan is linear in entity count, which is what to watch.
+  **It is the tightest margin among the single-query rows** — 13.8 ms against a
+  100 ms bar — so it is the row that moves first. The scan is linear in entity
+  count, which is what to watch.
+
+- **`projection-performance.json`** — `qa.md` §8's remaining six bars against
+  the real projector, on the 10,000-Capture corpus (Slice 6). Written by
+  `npm run test:local`.
+
+  Four rows are at or better than the spike's baseline. Two are not, and the
+  gap is structural rather than a regression: rebuild is 8.4 s against 215 ms,
+  and 100-event catch-up is 145 ms against 11.6 ms. The spike's projection
+  logic was a stand-in that wrote entity rows only; this projector also writes
+  a provenance row per field and maintains an FTS index, which is roughly three
+  writes per event where the spike did one. Both stay inside their bars, at 7×
+  and 3.5×.
+
+  **These two rows are where the suite has the least headroom**, so they are
+  what a later slice should watch. The file records what would count as a
+  regression and where to look first.
 
 ## To be generated on your machine
 
