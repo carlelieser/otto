@@ -116,4 +116,67 @@ describe("what model-facing code names", () => {
 
     expect(offenders, "the differ importing a model-facing port").toEqual([]);
   });
+
+  /**
+   * **The correction path does not re-enter the pipeline** (`add.md` §7,
+   * `qa.md` §7.7). Asserted structurally rather than with a spy, for the reason
+   * ADR-0022 gives about re-proposal: a spy proves the call went unmade on one
+   * input, and this proves there is nothing that could make it on any.
+   *
+   * The user has already decided. Sending their decision back through a model
+   * would be Otto second-guessing the only unambiguous signal it gets.
+   */
+  it("keeps adjudication free of any model-facing port", async () => {
+    const path = join(SOURCE_ROOT, "application/pipeline/adjudicate-proposal.ts");
+
+    const text = await readFile(path, "utf8");
+
+    expect(/ports\/(extractor|adjudicator|embedder)/.test(text)).toBe(false);
+    expect(/pipeline\/(extract|triage|repropose)/.test(text)).toBe(false);
+  });
+});
+
+/**
+ * **Split is not implemented in MVP** (PRD §7.2, ADR-0009, `qa.md` §7.4).
+ *
+ * `qa.md` §7.4 asks for a test that no split path exists rather than tests of
+ * split behaviour, and Slice 7 repeats the ask because the review queue is
+ * where a split affordance would first appear. Split is the half that genuinely
+ * needs the full review UI, and unlike merge it has no cheap lossless fallback.
+ *
+ * The one permitted mention is `application-policy.ts`, where `split` is a row
+ * in the rule table that always downgrades to review. A vocabulary entry with
+ * no producer is not a path — and keeping the row is what makes the day someone
+ * builds one land on a rule that already refuses to auto-apply it.
+ */
+describe("split has no implementation", () => {
+  const POLICY = "domain/policies/application-policy.ts";
+
+  it("names split nowhere but the rule table that refuses it", async () => {
+    const offenders: string[] = [];
+
+    for (const path of await sourceFilesUnder(SOURCE_ROOT)) {
+      const relative = path.slice(SOURCE_ROOT.length + 1);
+      if (relative === POLICY) continue;
+      const text = await readFile(path, "utf8");
+      if (/\bSplitEntity\b|\bEntitySplit\b|\bsplitEntity\b/.test(text)) offenders.push(relative);
+    }
+
+    expect(offenders, "a split Command, event, or handler").toEqual([]);
+  });
+
+  it("declares no split Command and no split event", () => {
+    const named = [...KNOWLEDGE_COMMAND_TYPES].filter((type) => /split/i.test(type));
+
+    expect(named).toEqual([]);
+  });
+
+  /** The queue is where a split affordance would surface first, so check it there. */
+  it("offers no split affordance on the review queue", async () => {
+    const path = join(SOURCE_ROOT, "application/surface/read-review-queue.ts");
+
+    const text = await readFile(path, "utf8");
+
+    expect(/split/i.test(text)).toBe(false);
+  });
 });

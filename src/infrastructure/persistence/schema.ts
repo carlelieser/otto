@@ -127,6 +127,38 @@ const REFUSED_MUTATIONS = [
  * project. Float32, since quantization trades recall for a resource Otto is not
  * short of at 3,000 entities.
  *
+ * ## The two tables Slice 7 adds, and why one of them is not truth
+ *
+ * `projection_queue_entries` holds the *differ's* Proposal — the Command, the
+ * two Confidences, the resolution summary — against the disposition triage gave
+ * it. `extraction_proposals` could not serve the review queue on its own: it
+ * holds a Mention with no entity named and no Command built (ADR-0019), and the
+ * queue has to hand something to the executor when the user confirms. Slice 5
+ * triaged in memory and stored only the decision, so nothing durable could
+ * reconstruct an entry.
+ *
+ * It carries the `projection_` prefix because it earns it: re-running the
+ * differ and triage over stored Captures reproduces every row, which is the
+ * ADR-0019 argument one stage later. `proposal` is JSON for the reason
+ * `mention` is — it is read whole by the surface that renders it and never
+ * queried by field.
+ *
+ * `adjudicated_at` is a stamp rather than a delete. PRD §5.4 wants what Otto
+ * did to stay visible after it is confirmed, and a correction recorded months
+ * later has to be able to name the Proposal it corrected.
+ *
+ * `projection_corrections` holds what the user chose instead (ADR-0006). It is
+ * rebuildable in the sense that matters — every correction is a compensating
+ * event in the log, and the row is derived from that event — which is what
+ * keeps the prefix honest here rather than merely conventional.
+ *
+ * `provider` and `model_version` are columns rather than a join through
+ * `projection_queue_entries`, because the bootstrap counter is per provider and
+ * model version (ADR-0008, `triage.md` §4) and that count is read on every
+ * triage decision. A join to find out which model was corrected is the
+ * reconstruction `add.md` §7 argues against for provenance, for the same
+ * reason: cheap to record now, expensive to derive later.
+ *
  * ## The tables Slice 6 adds are documented with the list that clears them
  *
  * `projection_field_provenance`, `projection_redirects`, `projection_position`,
@@ -184,6 +216,27 @@ CREATE TABLE IF NOT EXISTS proposal_dispositions (
   was_sampled         INTEGER NOT NULL,
   decided_at          TEXT NOT NULL,
   expires_at          TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_queue_entries (
+  proposal_id         TEXT PRIMARY KEY,
+  capture_id          TEXT NOT NULL,
+  proposal            TEXT NOT NULL,
+  disposition         TEXT NOT NULL,
+  confidence          REAL NOT NULL,
+  was_sampled         INTEGER NOT NULL,
+  adjudicated_at      TEXT,
+  queued_at           TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_corrections (
+  correction_id       TEXT PRIMARY KEY,
+  proposal_id         TEXT NOT NULL,
+  capture_id          TEXT NOT NULL,
+  chosen              TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  model_version       TEXT NOT NULL,
+  corrected_at        TEXT NOT NULL
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS projection_entities (
@@ -260,6 +313,10 @@ CREATE INDEX IF NOT EXISTS events_by_capture ON events (capture_id);
 CREATE INDEX IF NOT EXISTS proposals_by_capture ON extraction_proposals (capture_id, ordinal);
 CREATE INDEX IF NOT EXISTS dispositions_by_capture ON proposal_dispositions (capture_id);
 CREATE INDEX IF NOT EXISTS discards_by_expiry ON proposal_dispositions (disposition, expires_at);
+CREATE INDEX IF NOT EXISTS queue_by_disposition ON projection_queue_entries (disposition, queued_at);
+CREATE INDEX IF NOT EXISTS queue_by_capture ON projection_queue_entries (capture_id);
+CREATE INDEX IF NOT EXISTS corrections_by_model ON projection_corrections (provider, model_version);
+CREATE INDEX IF NOT EXISTS corrections_by_proposal ON projection_corrections (proposal_id);
 CREATE INDEX IF NOT EXISTS entities_by_type ON projection_entities (entity_type, name);
 CREATE INDEX IF NOT EXISTS aliases_by_alias ON projection_aliases (alias);
 CREATE INDEX IF NOT EXISTS relations_by_from ON projection_relations (from_id);

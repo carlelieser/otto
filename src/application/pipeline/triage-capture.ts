@@ -3,6 +3,7 @@ import { triage, type TriagedProposal } from "../../inference/calibration/triage
 import type { Draw } from "../../inference/calibration/sampling.js";
 import type { DispositionRecord, DispositionStore } from "../../ports/disposition-store.js";
 import type { Proposal } from "../../ports/proposal.js";
+import type { QueuedProposal, ReviewQueueStore } from "../../ports/review-queue-store.js";
 
 /**
  * **The stage where a Proposal becomes a decision, and a decision becomes an
@@ -55,6 +56,19 @@ export interface TriageResult {
 export interface TriageDependencies {
   readonly executor: Executor;
   readonly dispositions: DispositionStore;
+  /**
+   * Where the review queue reads its entries from (Slice 7).
+   *
+   * Separate from `dispositions` because the two hold different halves and keep
+   * different lifetimes: a disposition is triage's decision and a discard's
+   * expires at thirty days, while the entry holds the Proposal itself — the
+   * Command adjudication hands the executor — and outlives being answered.
+   *
+   * Optional so the stage stays constructible without it. A test about the
+   * bootstrap arithmetic has no queue to write to and should not have to make
+   * one to say so.
+   */
+  readonly queue?: ReviewQueueStore;
   readonly corrections: CorrectionCounts;
   readonly now: () => string;
   /**
@@ -80,7 +94,36 @@ export class CaptureTriage {
   async triageAll(proposals: readonly Proposal[]): Promise<TriageResult> {
     const triaged = await Promise.all(proposals.map((proposal) => this.#decide(proposal)));
     await this.#dependencies.dispositions.put(triaged.map((decision) => this.#recordOf(decision)));
+    await this.#enqueue(triaged);
     return { triaged, stale: await this.#applyConfident(triaged) };
+  }
+
+  /**
+   * Records what the queue shows: everything except the discards.
+   *
+   * A discard is written to `dispositions` and deliberately not here. The
+   * collapsed section reads from that table instead, which is what keeps the
+   * low band from becoming a second review queue — there is no entry carrying a
+   * Command for a discard, so there is nothing for a surface to offer to apply
+   * (`triage.md` §7).
+   */
+  async #enqueue(triaged: readonly TriagedProposal[]): Promise<void> {
+    const { queue } = this.#dependencies;
+    if (queue === undefined) return;
+    const queued = triaged.filter((decision) => decision.disposition !== "discard");
+    await queue.put(queued.map((decision) => this.#entryOf(decision)));
+  }
+
+  #entryOf(decision: TriagedProposal): QueuedProposal {
+    const { proposal, disposition, confidence, wasSampled } = decision;
+    return {
+      proposal,
+      disposition,
+      confidence,
+      wasSampled,
+      adjudicatedAt: null,
+      queuedAt: this.#dependencies.now(),
+    };
   }
 
   async #decide(proposal: Proposal): Promise<TriagedProposal> {

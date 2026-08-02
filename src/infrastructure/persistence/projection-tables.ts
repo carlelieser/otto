@@ -76,6 +76,38 @@ export const PROJECTION_TABLES = [
 ] as const;
 
 /**
+ * The two Slice 7 tables that carry the prefix and are **deliberately not in
+ * the list above**, which is the one exception in the file and needs saying.
+ *
+ * `reset` is always followed by a replay of the log, so a table belongs in the
+ * list exactly when folding events puts it back. Neither of these does.
+ *
+ * `projection_queue_entries` is rebuildable — by re-running the differ and
+ * triage over stored Captures, which is ADR-0019's argument one stage on — but
+ * *not by replaying the log*, because the log holds what changed rather than
+ * what Otto considered. Clearing it on a projection rebuild would empty the
+ * review queue of everything nobody had answered yet, discarding pending
+ * decisions to fix an unrelated corruption.
+ *
+ * `projection_corrections` is worse to lose. Each row is what the user chose
+ * instead, and ADR-0006's whole argument is that this is unreconstructable
+ * later: the compensating event carries `humanConfirmedProvenance`, which names
+ * no provider and no model version, so the log cannot say which model was
+ * corrected and the bootstrap counter could not be rebuilt from it. A rebuild
+ * that emptied this would silently return every model to bootstrap and destroy
+ * the eval set.
+ *
+ * They keep the prefix because they are derived rather than truth — droppable
+ * deliberately, by a tool that knows what it is doing — and the prefix is a
+ * claim about ownership rather than a promise that `reset` covers them. Naming
+ * them here is what keeps that distinction from reading as an oversight.
+ */
+export const REBUILD_EXEMPT_PROJECTIONS = [
+  "projection_queue_entries",
+  "projection_corrections",
+] as const;
+
+/**
  * The FTS5 tables, listed apart because they are emptied the same way and
  * created differently.
  *
