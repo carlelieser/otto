@@ -217,6 +217,38 @@ const TRIGGER_GUARDS: ReadonlyMap<string, string> = new Map([
  * reconstruction `add.md` §7 argues against for provenance, for the same
  * reason: cheap to record now, expensive to derive later.
  *
+ * ## The three tables Slice 10 adds carry no `projection_` prefix, deliberately
+ *
+ * `briefs` is **not** rebuildable from the log, and that is the point. A brief
+ * is a record of what mattered on a particular day under the rules in force
+ * that day (`salience.md` §4, ADR-0015) — recomputing it next month under v1's
+ * coefficients would produce a different brief and destroy the thing that made
+ * the old one worth keeping. So it is stored once and never regenerated, which
+ * is why it sits outside the namespace a rebuild empties.
+ *
+ * This is the one place in Otto where a derived-looking thing is durable, and
+ * the distinction is worth stating plainly: the *selection rules* are a
+ * projection, and the *brief* is a record of having applied them. Dropping
+ * `briefs` loses history; dropping any `projection_` table loses nothing.
+ *
+ * `brief_id` is derived from the kind and the date covered, which is what makes
+ * "one brief per day, never rewritten" a primary key rather than a check
+ * someone has to remember. `selection` holds the whole `BriefSelection` as JSON
+ * for the reason `mention` and `proposal` do — it is read whole by the surface
+ * that renders it and never queried by field.
+ *
+ * `brief_entities` is the queryable half of that JSON: which entities appeared
+ * in which brief, under which heading, at what salience. It is a table rather
+ * than a JSON extract because it is exactly what the instrumentation joins
+ * against, and `salience.md` §5's precision signal is that join.
+ *
+ * `brief_entity_opens` records that the user opened an entity and whether a
+ * brief had surfaced it — the passive precision-and-recall signal that replaces
+ * v0 with no feedback UI to build. `brief_id` is nullable, and the `NULL` rows
+ * are the interesting ones: an entity the user went looking for that no brief
+ * anticipated. ADR-0015 notes this is behavioural data about the user; it stays
+ * local like everything else (PRD §4.6) and is derived, so it can be dropped.
+ *
  * ## The tables Slice 6 adds are documented with the list that clears them
  *
  * `projection_field_provenance`, `projection_redirects`, `projection_position`,
@@ -353,6 +385,35 @@ CREATE TABLE IF NOT EXISTS projection_position (
   updated_at          TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS briefs (
+  brief_id            TEXT PRIMARY KEY,
+  kind                TEXT NOT NULL,
+  covers_from         TEXT NOT NULL,
+  covers_to           TEXT NOT NULL,
+  selection           TEXT NOT NULL,
+  prose               TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  model_version       TEXT NOT NULL,
+  generated_at        TEXT NOT NULL,
+  read_at             TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS brief_entities (
+  brief_id            TEXT NOT NULL,
+  entity_id           TEXT NOT NULL,
+  heading             TEXT NOT NULL,
+  salience            REAL NOT NULL,
+  PRIMARY KEY (brief_id, entity_id, heading)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS brief_entity_opens (
+  entity_id           TEXT NOT NULL,
+  opened_at           TEXT NOT NULL,
+  brief_id            TEXT,
+  salience            REAL NOT NULL,
+  PRIMARY KEY (entity_id, opened_at)
+) STRICT;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS projection_capture_search USING fts5 (
   capture_id UNINDEXED,
   text,
@@ -380,6 +441,10 @@ CREATE INDEX IF NOT EXISTS aliases_by_alias ON projection_aliases (alias);
 CREATE INDEX IF NOT EXISTS relations_by_from ON projection_relations (from_id);
 CREATE INDEX IF NOT EXISTS relations_by_to ON projection_relations (to_id);
 CREATE INDEX IF NOT EXISTS embeddings_by_type ON projection_embeddings (entity_type);
+CREATE INDEX IF NOT EXISTS briefs_by_kind ON briefs (kind, covers_to DESC);
+CREATE INDEX IF NOT EXISTS briefs_by_unread ON briefs (read_at);
+CREATE INDEX IF NOT EXISTS brief_entities_by_entity ON brief_entities (entity_id);
+CREATE INDEX IF NOT EXISTS opens_by_brief ON brief_entity_opens (brief_id);
 
 ${insertOnlyTriggers("events")}
 ${insertOnlyTriggers("captures")}

@@ -23,6 +23,7 @@ import { SqliteProposalStore } from "./infrastructure/persistence/sqlite-proposa
 import { SqliteDispositionStore } from "./infrastructure/persistence/sqlite-disposition-store.js";
 import { SqliteReviewQueueStore } from "./infrastructure/persistence/sqlite-review-queue-store.js";
 import { SqliteCorrectionStore } from "./infrastructure/persistence/sqlite-correction-store.js";
+import { SqliteBriefStore } from "./infrastructure/persistence/sqlite-brief-store.js";
 import { LocalEmbedder } from "./infrastructure/embedding/local-embedder.js";
 import { LocalAdjudicator } from "./infrastructure/llm/local-adjudicator.js";
 import { WhisperCliTranscriber } from "./infrastructure/transcription/whisper-cli-transcriber.js";
@@ -130,6 +131,15 @@ export interface Storage {
    * gathered now because it is unreconstructable later.
    */
   readonly corrections: SqliteCorrectionStore;
+  /**
+   * Stored briefs and the instrumentation that replaces salience v0
+   * (`salience.md` §4, §5).
+   *
+   * Not a `projection_` table and not emptied by a rebuild: a brief is a record
+   * of what mattered on a day under the coefficients in force that day, and
+   * recomputing it under v1's would produce a different one (ADR-0015).
+   */
+  readonly briefs: SqliteBriefStore;
   /** The read path: entity views, provenance, and full-text search. */
   readonly views: SqliteEntityViewStore;
   /** Closes the shared connection. No store owns it, so none of them closes it. */
@@ -141,13 +151,23 @@ export function createStorage(options: StorageOptions = {}): Storage {
   return { ...truthStores(database), ...projectionStores(database), close: () => database.close() };
 }
 
-/** The two tables that are truth, and the derived tables the pipeline writes. */
+/**
+ * The two tables that are truth, the derived tables the pipeline writes, and
+ * briefs.
+ *
+ * Briefs sit here rather than with the projections because they survive a
+ * rebuild: a brief records what mattered on a day under the rules in force that
+ * day, and recomputing it under v1's coefficients would produce a different
+ * brief (ADR-0015, `schema.ts`). Grouping it with the rebuildable stores would
+ * put it one refactor away from being emptied by `reset`.
+ */
 function truthStores(database: Database.Database) {
   return {
     events: new SqliteEventStore(database),
     captures: new SqliteCaptureStore(database),
     proposals: new SqliteProposalStore(database),
     dispositions: new SqliteDispositionStore(database),
+    briefs: new SqliteBriefStore(database),
   };
 }
 
