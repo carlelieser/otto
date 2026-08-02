@@ -1,0 +1,123 @@
+import type Database from "better-sqlite3";
+import type { Entity } from "../../domain/knowledge/entity.js";
+import type { FieldProvenance } from "../../domain/knowledge/projected-state.js";
+import type { Relation } from "../../domain/knowledge/relation.js";
+import { toEntityParameters, toRelationParameters } from "./entity-row.js";
+import { toProvenanceParameters } from "./provenance-row.js";
+
+const UPSERT_ENTITY = `
+INSERT INTO projection_entities (entity_id, entity_type, fields, name, version)
+VALUES (@entity_id, @entity_type, @fields, @name, @version)
+ON CONFLICT (entity_id) DO UPDATE SET
+  entity_type = excluded.entity_type,
+  fields = excluded.fields,
+  name = excluded.name,
+  version = excluded.version`;
+
+const DELETE_ALIASES = `DELETE FROM projection_aliases WHERE entity_id = ?`;
+
+const INSERT_ALIAS = `
+INSERT INTO projection_aliases (entity_id, alias) VALUES (?, ?)
+ON CONFLICT (entity_id, alias) DO NOTHING`;
+
+const INSERT_RELATION = `
+INSERT INTO projection_relations (relation_name, from_id, from_type, to_id, to_type)
+VALUES (@relation_name, @from_id, @from_type, @to_id, @to_type)
+ON CONFLICT (relation_name, from_id, to_id) DO NOTHING`;
+
+const DELETE_PROVENANCE = `DELETE FROM projection_field_provenance WHERE entity_id = ?`;
+
+const INSERT_PROVENANCE = `
+INSERT INTO projection_field_provenance (
+  entity_id, field, event_id, proposal_id, capture_id,
+  provider, model_version, confidence, is_human_confirmed, recorded_at
+) VALUES (
+  @entity_id, @field, @event_id, @proposal_id, @capture_id,
+  @provider, @model_version, @confidence, @is_human_confirmed, @recorded_at
+)`;
+
+const DELETE_ENTITY_SEARCH = `DELETE FROM projection_entity_search WHERE entity_id = ?`;
+
+const INSERT_ENTITY_SEARCH = `
+INSERT INTO projection_entity_search (entity_id, entity_type, text) VALUES (?, ?, ?)`;
+
+/**
+ * One projected entity written to its four tables: the row, its aliases, its
+ * search text, and its provenance.
+ *
+ * Functions rather than methods for the reason `read-projection-rows.ts` gives:
+ * none of this needs the store's clock or opens its own transaction. The caller
+ * wraps a whole batch in one, which is what keeps the recorded position from
+ * running ahead of the rows.
+ */
+export function writeEntityRows(
+  database: Database.Database,
+  entity: Entity,
+  pointers: ReadonlyMap<string, FieldProvenance>,
+): void {
+  database.prepare(UPSERT_ENTITY).run(toEntityParameters(entity));
+  writeAliases(database, entity);
+  indexEntity(database, entity);
+  writeProvenance(database, entity.id, pointers);
+}
+
+/**
+ * Aliases are replaced rather than merged.
+ *
+ * What an entity's aliases are is whatever the log says they are, and a
+ * projection that unioned across rebuilds would accumulate aliases the log no
+ * longer supports. The "never shrinks" rule in `schema.md` §2 is a rule about
+ * the differ, which is what refuses to emit a Command dropping one.
+ */
+function writeAliases(database: Database.Database, entity: Entity): void {
+  database.prepare(DELETE_ALIASES).run(entity.id);
+  const insert = database.prepare(INSERT_ALIAS);
+  for (const alias of entity.fields["aliases"] ?? []) {
+    if (typeof alias === "string") insert.run(entity.id, alias);
+  }
+}
+
+/**
+ * The searchable text of an entity: every text value it holds.
+ *
+ * Rebuilt wholesale per write rather than diffed, because FTS5 has no upsert
+ * and a stale row would return a hit for a value the entity no longer has — a
+ * search index that outlives the fact it indexed.
+ */
+function indexEntity(database: Database.Database, entity: Entity): void {
+  database.prepare(DELETE_ENTITY_SEARCH).run(entity.id);
+  const text = searchableText(entity);
+  if (text !== "") {
+    database.prepare(INSERT_ENTITY_SEARCH).run(entity.id, entity.type, text);
+  }
+}
+
+function writeProvenance(
+  database: Database.Database,
+  entityId: string,
+  pointers: ReadonlyMap<string, FieldProvenance>,
+): void {
+  database.prepare(DELETE_PROVENANCE).run(entityId);
+  const insert = database.prepare(INSERT_PROVENANCE);
+  for (const [field, pointer] of pointers) {
+    insert.run(toProvenanceParameters(entityId, field, pointer));
+  }
+}
+
+export function writeRelationRow(database: Database.Database, relation: Relation): void {
+  database.prepare(INSERT_RELATION).run(toRelationParameters(relation));
+}
+
+/**
+ * Every text value on an entity, joined for the full-text index.
+ *
+ * Text only: a date's timestamp is not something anyone searches for, and
+ * indexing it would return hits on digit strings that match nothing a user
+ * typed.
+ */
+function searchableText(entity: Entity): string {
+  return Object.values(entity.fields)
+    .flat()
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+}

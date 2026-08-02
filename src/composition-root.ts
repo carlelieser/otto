@@ -5,7 +5,17 @@ import { type CommandTranslator, Executor } from "./application/pipeline/execute
 import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
+import { ProjectionWorker } from "./application/projection/projection-worker.js";
+import type { SnapshotStore } from "./application/projection/snapshot.js";
+import { KnowledgeReads } from "./application/surface/read-knowledge.js";
+import {
+  KNOWLEDGE_EVENT_TYPES,
+  KNOWLEDGE_EVENT_VERSION,
+} from "./domain/events/knowledge-events.js";
+import { identityUpcast, UpcastRegistry } from "./domain/events/upcast-registry.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";
+import { SqliteEntityViewStore } from "./infrastructure/persistence/sqlite-entity-view-store.js";
+import { SqliteProjectionStore } from "./infrastructure/persistence/sqlite-projection-store.js";
 import { createExtractor, type ExtractionOptions } from "./composition/extractor-selection.js";
 import { SqliteCaptureStore } from "./infrastructure/persistence/sqlite-capture-store.js";
 import { SqliteEventStore } from "./infrastructure/persistence/sqlite-event-store.js";
@@ -89,20 +99,90 @@ export interface Storage {
    * only, which is what keeps ADR-0003 structural.
    */
   readonly entities: SqliteEntityRepository;
+  /**
+   * Where the projection worker writes, and how far it has folded.
+   *
+   * On the same connection as everything else, which is what makes the
+   * worker's write atomic with its position: a projection whose recorded
+   * position ran ahead of its rows would resume past events it never folded.
+   *
+   * The worker runs in its own process (`add.md` §4) so a rebuild never blocks
+   * capture. That is a deployment fact rather than a wiring one — the process
+   * opens its own `Storage` against the same file, and SQLite's WAL is what
+   * lets it read while the pipeline writes (`runtime.md` §1).
+   */
+  readonly projections: SqliteProjectionStore;
+  /** The read path: entity views, provenance, and full-text search. */
+  readonly views: SqliteEntityViewStore;
   /** Closes the shared connection. No store owns it, so none of them closes it. */
   readonly close: () => void;
 }
 
 export function createStorage(options: StorageOptions = {}): Storage {
   const database: Database.Database = openDatabase(options.databaseFile);
+  return { ...truthStores(database), ...projectionStores(database), close: () => database.close() };
+}
+
+/** The two tables that are truth, and the derived tables the pipeline writes. */
+function truthStores(database: Database.Database) {
   return {
     events: new SqliteEventStore(database),
     captures: new SqliteCaptureStore(database),
     proposals: new SqliteProposalStore(database),
     dispositions: new SqliteDispositionStore(database),
-    entities: new SqliteEntityRepository(database),
-    close: () => database.close(),
   };
+}
+
+/** Everything rebuildable from the log: the `projection_` tables and their reads. */
+function projectionStores(database: Database.Database) {
+  return {
+    entities: new SqliteEntityRepository(database),
+    projections: new SqliteProjectionStore(database),
+    views: new SqliteEntityViewStore(database),
+  };
+}
+
+/**
+ * The projection worker, wired to the log and the projection tables.
+ *
+ * The upcast registry is built here rather than held as a module constant: it
+ * is composition, and every knowledge event ships at version 1 with an identity
+ * upcast (ADR-0011). What this buys is that the *seam* is exercised in
+ * production rather than only in a test — a registry nothing consults is one
+ * that has quietly stopped working by event type #20.
+ */
+export function createProjectionWorker(
+  storage: Storage,
+  snapshots?: SnapshotStore,
+): ProjectionWorker {
+  return new ProjectionWorker({
+    events: storage.events,
+    projections: storage.projections,
+    upcasts: createUpcastRegistry(),
+    ...(snapshots === undefined ? {} : { snapshots }),
+  });
+}
+
+/**
+ * Every event type at its current version, each with an identity upcast.
+ *
+ * ADR-0011's cost, stated plainly: these accumulate and can never be deleted.
+ * A new payload shape is a new version with an upcast from the old one, added
+ * here — never an edit to an existing entry, which would rewrite the meaning of
+ * events already in the log.
+ */
+export function createUpcastRegistry(): UpcastRegistry {
+  const upcasts = new UpcastRegistry();
+  for (const type of KNOWLEDGE_EVENT_TYPES) {
+    upcasts.declareCurrentVersion(type, KNOWLEDGE_EVENT_VERSION);
+    upcasts.register({ type, fromVersion: KNOWLEDGE_EVENT_VERSION, upcast: identityUpcast });
+  }
+  return upcasts;
+}
+
+/** The read path, wired to the projection tables. */
+export function createKnowledgeReads(storage: Storage): KnowledgeReads {
+  return new KnowledgeReads(storage.views, storage.projections);
 }
 
 /**

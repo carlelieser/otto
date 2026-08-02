@@ -55,6 +55,30 @@ export function humanConfirmedProvenance(captureId: string, proposalId: string |
   };
 }
 
+/**
+ * The record in a fixed field order, for comparing two of them.
+ *
+ * Serialising a provenance record is a question about this shape, so it is
+ * answered here rather than wherever a comparison happens to be needed. A
+ * caller writing the six fields out itself is a second declaration that drifts
+ * the first time this one gains a field — and it would have to name a
+ * Confidence to do it, which `add.md` §3's fourth rule reserves to this module.
+ *
+ * The order is the declaration's, so a field added above is a field that
+ * appears in the middle rather than at the end. Nothing parses the output, so
+ * only its stability within one run matters.
+ */
+export function canonicalProvenance(provenance: Provenance): Record<string, unknown> {
+  return {
+    proposalId: provenance.proposalId,
+    captureId: provenance.captureId,
+    provider: provenance.provider,
+    modelVersion: provenance.modelVersion,
+    confidence: provenance.confidence,
+    isHumanConfirmed: provenance.isHumanConfirmed,
+  };
+}
+
 /** Every field of `provenance`, or the names of those that are missing or invalid. */
 export function provenanceViolations(provenance: Provenance): readonly string[] {
   return [...missingRequiredFields(provenance), ...confidenceViolations(provenance)];
