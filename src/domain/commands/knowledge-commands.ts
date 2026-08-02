@@ -23,14 +23,27 @@ export const SET_FIELD = "SetField";
 export const ADD_TO_SET = "AddToSet";
 export const CLEAR_FIELD = "ClearField";
 export const RELATE = "Relate";
+export const MERGE_ENTITIES = "MergeEntities";
 
-/** Every Command type the differ may emit. */
+/**
+ * Every Command type the differ may emit.
+ *
+ * **Merge is here and its mirror is not, deliberately.** Split's semantics are
+ * settled (ADR-0009) and its interface is not: it must decide, per recorded
+ * value, which identity it concerned, and unlike merge it has no cheap lossless
+ * fallback. Merge ships alone (ADR-0012).
+ *
+ * The absence is asserted over the whole tree by
+ * `tests/inference/command-seam.test.ts`, since this list is only one of the
+ * places such a Command could appear.
+ */
 export const KNOWLEDGE_COMMAND_TYPES = [
   CREATE_ENTITY,
   SET_FIELD,
   ADD_TO_SET,
   CLEAR_FIELD,
   RELATE,
+  MERGE_ENTITIES,
 ] as const;
 
 export type KnowledgeCommandType = (typeof KNOWLEDGE_COMMAND_TYPES)[number];
@@ -81,6 +94,25 @@ export interface ClearFieldPayload {
   readonly because: string;
 }
 
+/**
+ * Two entities that were always one become one (ADR-0009).
+ *
+ * **The survivor is the aggregate and only the loser is in the payload.** That
+ * asymmetry is what makes the merge check a version: the Command targets the
+ * survivor, so a merge computed against a Sarah who changed while the user was
+ * deciding fails the executor's check like any other Command. Naming both ends
+ * in the payload would leave the aggregate free to be either one, and two merges
+ * of the same pair in opposite directions would both pass.
+ *
+ * A merge supersedes rather than contradicts: Otto was not wrong to have thought
+ * there were two, and every event recorded against the loser stays exactly as it
+ * was. The projection is where the change shows.
+ */
+export interface MergeEntitiesPayload {
+  /** The identity that survives as a redirect and appears in no list view. */
+  readonly mergedId: string;
+}
+
 /** Two entities are linked by a relation from the closed vocabulary. */
 export interface RelatePayload {
   readonly relation: RelationName;
@@ -97,6 +129,7 @@ export interface KnowledgeCommandPayloads {
   readonly [ADD_TO_SET]: AddToSetPayload;
   readonly [CLEAR_FIELD]: ClearFieldPayload;
   readonly [RELATE]: RelatePayload;
+  readonly [MERGE_ENTITIES]: MergeEntitiesPayload;
 }
 
 /** The aggregate type a knowledge Command targets. */

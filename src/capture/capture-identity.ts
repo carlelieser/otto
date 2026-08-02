@@ -160,3 +160,31 @@ export function deriveCorrectionId(identity: CorrectionIdentity): string {
   const parts = [proposalId, chosenType, chosenTargetId, chosenPayload];
   return `corr-${sha256Hex(parts).slice(0, ID_LENGTH)}`;
 }
+
+/** The two identities a suspected duplicate names, in the direction proposed. */
+export interface DuplicateIdentity {
+  readonly survivorId: string;
+  readonly mergedId: string;
+}
+
+/**
+ * A suspected duplicate's Proposal id, derived from **the pair alone**.
+ *
+ * The three derivations above all take a Capture, and this one cannot: a
+ * suspected duplicate comes from comparing the entity table against itself, and
+ * no note said anything about it. Nothing else about the pair is in the hash
+ * either — not the similarity, not the clock — because the sweep runs repeatedly
+ * over a table that mostly does not change, and an id carrying either would make
+ * every run a fresh queue entry for a question the user has already been asked.
+ *
+ * Deriving from the pair makes a repeated detection idempotent, which is the
+ * same property `deriveProposalId` gets from hashing the model: running again
+ * changes nothing unless what is being proposed changed.
+ *
+ * `dup-` continues the prefix pattern rather than starting a second one, and the
+ * digest, separator, and truncation are the ones every id in Otto uses.
+ */
+export function deriveDuplicateId(identity: DuplicateIdentity): string {
+  const { survivorId, mergedId } = identity;
+  return `dup-${sha256Hex([survivorId, mergedId]).slice(0, ID_LENGTH)}`;
+}

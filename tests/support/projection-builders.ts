@@ -1,5 +1,6 @@
 import type { DomainEvent, StoredEvent } from "../../src/domain/events/domain-event.js";
 import {
+  ENTITIES_MERGED,
   ENTITIES_RELATED,
   ENTITY_CREATED,
   FIELD_CLEARED,
@@ -74,18 +75,29 @@ export function aFieldCleared(
 }
 
 /** An `EntitiesRelated` linking the Helios project to Sarah. */
-export function anEntitiesRelated(overrides: EventOverrides = {}): DomainEvent {
+export function anEntitiesRelated(
+  overrides: EventOverrides & { fromId?: string; toId?: string } = {},
+): DomainEvent {
+  const { fromId = "proj-helios", toId = DEFAULT_ENTITY_ID, ...rest } = overrides;
   return build(
     ENTITIES_RELATED,
-    {
-      relation: "involves",
-      fromId: "proj-helios",
-      fromType: "Project",
-      toId: DEFAULT_ENTITY_ID,
-      toType: "Person",
-    },
-    { aggregateId: "proj-helios", ...overrides },
+    { relation: "involves", fromId, fromType: "Project", toId, toType: "Person" },
+    { aggregateId: "proj-helios", ...rest },
   );
+}
+
+/**
+ * An `EntitiesMerged` folding `mergedId` into the surviving aggregate.
+ *
+ * The survivor is the aggregate and the loser is the payload, which is the
+ * asymmetry `MergeEntitiesPayload` explains — so a test says which way round the
+ * merge went by naming the aggregate, exactly as the executor sees it.
+ */
+export function anEntitiesMerged(
+  payload: { mergedId: string },
+  overrides: EventOverrides = {},
+): DomainEvent {
+  return build(ENTITIES_MERGED, payload, overrides);
 }
 
 let sequence = 0;

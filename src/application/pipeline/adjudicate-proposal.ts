@@ -1,5 +1,6 @@
 import { deriveCorrectionId } from "../../capture/capture-identity.js";
 import type { Command } from "../../domain/commands/command.js";
+import { MERGE_ENTITIES } from "../../domain/commands/knowledge-commands.js";
 import type { Correction } from "../../domain/knowledge/correction.js";
 import { humanConfirmedProvenance } from "../../domain/values/provenance.js";
 import type { CorrectionStore } from "../../ports/correction-store.js";
@@ -59,6 +60,20 @@ export interface AdjudicationDependencies {
    * one action" is exactly the affordance that would cost.
    */
   readonly currentVersionOf: (aggregateId: string) => Promise<number>;
+  /**
+   * The id a Command's target resolves to, following redirects (ADR-0009).
+   *
+   * **This is what makes a proposal queued before a merge applicable a week
+   * after it.** The entry still names #4891 — nothing rewrote it, and the merge
+   * deliberately did not touch the review queue — so the id is resolved here, at
+   * the moment the user answers, rather than by a sweep over pending entries at
+   * merge time.
+   *
+   * Defaults to identity so a caller with no projection to consult still gets a
+   * working adjudication path. A test about the correction corpus has no
+   * redirect table and should not have to build one to say so.
+   */
+  readonly resolveId?: (aggregateId: string) => string;
   readonly now: () => string;
 }
 
@@ -162,9 +177,37 @@ export class ProposalAdjudication {
   async #apply(command: Command, entry: QueuedProposal): Promise<void> {
     const { proposalId, captureId } = entry.proposal;
     await this.#dependencies.executor.execute({
-      ...command,
+      ...(await this.#retargeted(command)),
       provenance: humanConfirmedProvenance(captureId, proposalId),
     });
+  }
+
+  /**
+   * The Command against the id its target now resolves to.
+   *
+   * A merge that happened while the entry waited moved the target, and the entry
+   * was deliberately not rewritten (ADR-0009) — so a Command naming #4891 is
+   * pointed at #5310 here and applies to the entity the user can actually see.
+   *
+   * A retargeted Command is **restamped**, because the version it carries is the
+   * merged-away entity's and means nothing about the survivor. Its own version
+   * check is what would otherwise refuse it, reporting a stale target where
+   * there is only a redirect.
+   *
+   * **A merge is always restamped**, moved or not. A suspected duplicate is a
+   * pair of ids detected from the entity table rather than an inference about
+   * one entity's fields, so it carries no meaningful version — and it does not
+   * stop being a duplicate because someone set a field on one side while it
+   * waited. This is `currentVersionOf`'s argument for corrections, arriving for
+   * the same reason: the check exists to catch a stale *inference*, and neither
+   * of these is one.
+   */
+  async #retargeted(command: Command): Promise<Command> {
+    const { resolveId = identity } = this.#dependencies;
+    const id = resolveId(command.aggregate.id);
+    const moved = id !== command.aggregate.id;
+    if (!moved && !isMerge(command)) return command;
+    return this.#restamped({ ...command, aggregate: { ...command.aggregate, id } });
   }
 
   /** Records the counterfactual against the model whose Proposal got it wrong. */
@@ -204,4 +247,14 @@ function correctionIdFor(proposalId: string, chosen: Command): string {
     chosenTargetId: chosen.aggregate.id,
     chosenPayload: JSON.stringify(chosen.payload),
   });
+}
+
+/** The default when no projection is wired: nothing was ever merged. */
+function identity(aggregateId: string): string {
+  return aggregateId;
+}
+
+/** Whether this Command is a merge, which is restamped whether or not it moved. */
+function isMerge(command: Command): boolean {
+  return command.type === MERGE_ENTITIES;
 }

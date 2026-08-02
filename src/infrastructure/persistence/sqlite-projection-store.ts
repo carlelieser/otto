@@ -9,7 +9,12 @@ import {
 } from "../../ports/projection-store.js";
 import { PROJECTION_TABLES, SEARCH_TABLES } from "./projection-tables.js";
 import { readKnowledge } from "./read-projection-rows.js";
-import { indexCaptureRows, writeEntityRows, writeRelationRow } from "./write-projection-rows.js";
+import {
+  indexCaptureRows,
+  writeEntityRows,
+  writeRedirectRow,
+  writeRelationRow,
+} from "./write-projection-rows.js";
 
 const SELECT_CHECKPOINT = `
 SELECT position, is_rebuilding FROM projection_position WHERE projection_name = ?`;
@@ -50,13 +55,33 @@ export class SqliteProjectionStore implements ProjectionStore {
    * against a 500 ms bar — the shape `qa.md` §8 diagnoses as the projection
    * model doing too much work per event. The touched set comes from the fold,
    * which already knows what it wrote.
+   *
+   * ## The three passes run in this order, and the order is load-bearing
+   *
+   * **Entities before merges.** A batch holding both an entity's creation and
+   * its merging away touches it twice: once as a row to write and once as an id
+   * to remove. Writing and then removing leaves the projection saying what the
+   * log says; the reverse deletes the row and re-inserts it, which is a
+   * merged-away entity reappearing in every list view.
+   *
+   * **Merges before relations.** A merge deletes every edge naming the
+   * merged-away id, and the fold has already repointed those edges at the
+   * survivor — so the repointed rows must be inserted *after* the delete that
+   * clears the old ones. The reverse order deletes the edge the merge just
+   * moved, and the survivor silently loses a relation.
    */
   async write(state: KnowledgeState, position: LogPosition): Promise<void> {
     this.#database.transaction(() => {
       for (const id of state.touched.entities) this.#writeEntity(state, id);
+      for (const id of state.touched.merged) this.#writeRedirect(state, id);
       for (const key of state.touched.relations) this.#writeRelation(state, key);
       this.#recordPosition(position, false);
     })();
+  }
+
+  #writeRedirect(state: KnowledgeState, mergedId: string): void {
+    const survivorId = state.redirects.get(mergedId);
+    if (survivorId !== undefined) writeRedirectRow(this.#database, mergedId, survivorId);
   }
 
   #writeEntity(state: KnowledgeState, id: string): void {

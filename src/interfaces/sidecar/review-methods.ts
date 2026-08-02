@@ -1,4 +1,5 @@
 import type { ProposalAdjudication } from "../../application/pipeline/adjudicate-proposal.js";
+import type { DuplicateDetection } from "../../application/pipeline/detect-duplicates.js";
 import type { BootstrapStatus } from "../../application/surface/read-bootstrap-status.js";
 import type { ReviewQueue } from "../../application/surface/read-review-queue.js";
 import type { Command } from "../../domain/commands/command.js";
@@ -19,6 +20,7 @@ export function reviewMethods(
   queue: ReviewQueue,
   adjudication: ProposalAdjudication,
   bootstrap: BootstrapStatus,
+  duplicates?: DuplicateDetection,
 ): Methods {
   return {
     listAwaitingReview: () => queue.awaitingReview(),
@@ -27,7 +29,26 @@ export function reviewMethods(
     confirmProposal: (params) => adjudication.confirm(requireProposalId(params)),
     correctProposal: (params) => correctProposal(params, adjudication),
     bootstrapStatus: (params) => bootstrap.forModel(requireModel(params)),
+    ...duplicateMethods(duplicates),
   };
+}
+
+/**
+ * The duplicate sweep, when there is one wired.
+ *
+ * It returns the pairs it queued rather than nothing, so a caller can show "3
+ * suspected duplicates found" without a second read — and so a sweep that found
+ * nothing is distinguishable from one that did not run.
+ *
+ * **There is no method here that merges.** The sweep queues entries and
+ * `confirmProposal` is what applies one, which is the same path every other
+ * proposal takes. A `mergeEntities` method on this transport would be a way to
+ * merge without a user having confirmed anything, at any confidence, which is
+ * exactly what ADR-0007 forbids.
+ */
+function duplicateMethods(duplicates?: DuplicateDetection): Methods {
+  if (duplicates === undefined) return {};
+  return { sweepDuplicates: () => duplicates.sweep() };
 }
 
 /**

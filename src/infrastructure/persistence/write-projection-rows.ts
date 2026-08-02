@@ -38,6 +38,15 @@ INSERT INTO projection_field_provenance (
 
 const DELETE_ENTITY_SEARCH = `DELETE FROM projection_entity_search WHERE entity_id = ?`;
 
+const DELETE_ENTITY = `DELETE FROM projection_entities WHERE entity_id = ?`;
+
+const UPSERT_REDIRECT = `
+INSERT INTO projection_redirects (from_id, to_id) VALUES (@from_id, @to_id)
+ON CONFLICT (from_id) DO UPDATE SET to_id = excluded.to_id`;
+
+const DELETE_RELATIONS = `
+DELETE FROM projection_relations WHERE from_id = @id OR to_id = @id`;
+
 const INSERT_ENTITY_SEARCH = `
 INSERT INTO projection_entity_search (entity_id, entity_type, text) VALUES (?, ?, ?)`;
 
@@ -106,6 +115,50 @@ function writeProvenance(
 
 export function writeRelationRow(database: Database.Database, relation: Relation): void {
   database.prepare(INSERT_RELATION).run(toRelationParameters(relation));
+}
+
+/**
+ * A merged-away identity: its rows removed, and the redirect that replaces them
+ * written (ADR-0009).
+ *
+ * The delete and the insert belong together because they are one change to what
+ * the projection says about that id — "it is not an entity, it is a reference to
+ * one" — and a caller that did only the first would leave every pre-merge
+ * reference resolving to nothing.
+ *
+ * Its aliases, search text, and provenance go too. An alias left behind would
+ * keep returning the merged-away entity as a candidate for resolution, which is
+ * the duplicate the merge just resolved coming back through the door candidate
+ * generation reads.
+ *
+ * **Its edges are deleted rather than repointed here**, because the fold has
+ * already repointed them: the batch's touched set carries the moved edge, which
+ * `write` inserts. Deleting first is what removes the row that named the dead
+ * id, since every other table in this file is keyed by entity and this one is
+ * keyed by name-plus-both-ends — an upsert cannot reach the old key. Without
+ * this the survivor keeps two edges where the log says one, and the orphan is
+ * invisible to any query that filters by the survivor's id.
+ */
+export function writeRedirectRow(
+  database: Database.Database,
+  mergedId: string,
+  survivorId: string,
+): void {
+  removeMergedRows(database, mergedId);
+  database.prepare(UPSERT_REDIRECT).run({ from_id: mergedId, to_id: survivorId });
+}
+
+/** Every row the merged-away identity had, in the five tables that held one. */
+function removeMergedRows(database: Database.Database, mergedId: string): void {
+  for (const statement of [
+    DELETE_ENTITY,
+    DELETE_ALIASES,
+    DELETE_PROVENANCE,
+    DELETE_ENTITY_SEARCH,
+  ]) {
+    database.prepare(statement).run(mergedId);
+  }
+  database.prepare(DELETE_RELATIONS).run({ id: mergedId });
 }
 
 const CLEAR_CAPTURE_INDEX = `DELETE FROM projection_capture_search`;

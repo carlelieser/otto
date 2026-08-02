@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import type { DomainEvent } from "../../src/domain/events/domain-event.js";
 import {
+  ENTITIES_MERGED,
   ENTITIES_RELATED,
   ENTITY_CREATED,
   FIELD_CLEARED,
@@ -74,9 +75,27 @@ const aRelatedEvent = fc.record({
   }),
 });
 
+/**
+ * A merge folding one id from the pool into another.
+ *
+ * Generated freely, including merges of an entity into itself and of ids nothing
+ * created — the generator's whole discipline is that it is not restricted to
+ * logs the pipeline would produce, and a merge is the event where a dropped
+ * branch removes an entity rather than leaving one out.
+ *
+ * Weighted below the others by appearing once among several shapes: a log where
+ * every second event is a merge holds almost no entities to merge.
+ */
+const aMergedEvent = fc.record({
+  type: fc.constant(ENTITIES_MERGED),
+  aggregateId: anEntityId,
+  payload: fc.record({ mergedId: anEntityId }),
+});
+
 /** One generated event, before its id and provenance are stamped on. */
 const anyEventShape = fc.oneof(
   aCreatedEvent,
+  aMergedEvent,
   aFieldSetEvent,
   aFieldSetEvent,
   aSetMemberEvent,

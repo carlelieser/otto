@@ -30,6 +30,7 @@ export function serialiseKnowledge(state: KnowledgeState): string {
     entities: serialiseEntities(state),
     provenance: serialiseProvenance(state),
     relations: serialiseRelations(state),
+    redirects: sortedEntries(state.redirects),
   });
 }
 
