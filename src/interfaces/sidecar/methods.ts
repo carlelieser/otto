@@ -7,6 +7,7 @@ import type { Methods } from "./dispatch.js";
 import { extractionMethods } from "./extraction-methods.js";
 import { reviewMethods } from "./review-methods.js";
 import type { ProposalAdjudication } from "../../application/pipeline/adjudicate-proposal.js";
+import type { DuplicateDetection } from "../../application/pipeline/detect-duplicates.js";
 import type { BootstrapStatus } from "../../application/surface/read-bootstrap-status.js";
 import type { ReviewQueue } from "../../application/surface/read-review-queue.js";
 
@@ -41,9 +42,9 @@ export function sidecarMethods(capture?: CaptureDependencies): Methods {
  * real sidecar passes all three.
  */
 function reviewMethodsFor(capture: CaptureDependencies): Methods {
-  const { review, adjudication, bootstrap } = capture;
+  const { review, adjudication, bootstrap, duplicates } = capture;
   if (review === undefined || adjudication === undefined || bootstrap === undefined) return {};
-  return reviewMethods(review, adjudication, bootstrap);
+  return reviewMethods(review, adjudication, bootstrap, duplicates);
 }
 
 /**
@@ -72,6 +73,8 @@ export interface CaptureDependencies {
   readonly adjudication?: ProposalAdjudication;
   /** Why Otto is asking so much, so the dashboard can say (`triage.md` §4). */
   readonly bootstrap?: BootstrapStatus;
+  /** The duplicate sweep, which queues suspected pairs and merges nothing (Slice 8). */
+  readonly duplicates?: DuplicateDetection;
 }
 
 /**

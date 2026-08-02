@@ -1,5 +1,6 @@
 import type { DomainEvent } from "../events/domain-event.js";
 import {
+  ENTITIES_MERGED,
   ENTITIES_RELATED,
   ENTITY_CREATED,
   FIELD_CLEARED,
@@ -10,9 +11,11 @@ import type {
   AddToSetPayload,
   ClearFieldPayload,
   CreateEntityPayload,
+  MergeEntitiesPayload,
   RelatePayload,
   SetFieldPayload,
 } from "../commands/knowledge-commands.js";
+import { mergedEntity } from "./merge-entities.js";
 import type { EntityType } from "../schema/entity-schema.js";
 import { isSameValue, type Entity, type EntityValue } from "./entity.js";
 import type { Relation } from "./relation.js";
@@ -50,6 +53,7 @@ const FOLDS: Readonly<Record<string, Fold>> = {
   [SET_MEMBER_ADDED]: addToSet,
   [FIELD_CLEARED]: clearField,
   [ENTITIES_RELATED]: relate,
+  [ENTITIES_MERGED]: merge,
 };
 
 type Fold = (state: KnowledgeState, event: DomainEvent) => KnowledgeState;
@@ -120,6 +124,65 @@ function relate(state: KnowledgeState, event: DomainEvent): KnowledgeState {
   const relations = new Map(state.relations);
   relations.set(key, relation);
   return { ...state, relations, touched: touchRelation(state.touched, key) };
+}
+
+/**
+ * Two entities become one: the survivor absorbs the loser's values, the loser
+ * leaves the projection, and a redirect records where it went (ADR-0009).
+ *
+ * **Nothing in the log is rewritten.** Every event against the merged-away id
+ * remains exactly as it was, because at the time Otto genuinely believed there
+ * were two. This branch is the whole of what a merge changes.
+ *
+ * A merge naming an entity that is not there is dropped like every other fold's
+ * missing target, and a merge of an entity into itself is refused — it is not a
+ * merge, and folding it would delete the entity it names twice.
+ */
+function merge(state: KnowledgeState, event: DomainEvent): KnowledgeState {
+  const { mergedId } = event.payload as MergeEntitiesPayload;
+  const survivor = state.entities.get(event.aggregate.id);
+  const loser = state.entities.get(mergedId);
+  if (survivor === undefined || loser === undefined || survivor.id === loser.id) return state;
+  return withRedirect(absorb(state, event, survivor, loser), loser.id, survivor.id);
+}
+
+/** The survivor rewritten with both sides' values, and the loser removed. */
+function absorb(
+  state: KnowledgeState,
+  event: DomainEvent,
+  survivor: Entity,
+  loser: Entity,
+): KnowledgeState {
+  const outcome = mergedEntity({
+    survivor,
+    loser,
+    survivorPointers: state.provenance.get(survivor.id) ?? new Map(),
+    loserPointers: state.provenance.get(loser.id) ?? new Map(),
+    mergePointer: pointerFor(event),
+  });
+  const written = withPointers(withEntity(state, outcome.entity), survivor.id, outcome.pointers);
+  return withoutEntity(written, loser.id);
+}
+
+/** The loser's row and pointers gone from the projection, its id marked merged. */
+function withoutEntity(state: KnowledgeState, id: string): KnowledgeState {
+  const entities = new Map(state.entities);
+  entities.delete(id);
+  const provenance = new Map(state.provenance);
+  provenance.delete(id);
+  (state.touched.entities as Set<string>).delete(id);
+  return { ...state, entities, provenance, touched: touchMerged(state.touched, id) };
+}
+
+function withRedirect(state: KnowledgeState, fromId: string, toId: string): KnowledgeState {
+  const redirects = new Map(state.redirects);
+  redirects.set(fromId, toId);
+  return { ...state, redirects };
+}
+
+function touchMerged(touched: TouchedEntities, id: string): TouchedEntities {
+  (touched.merged as Set<string>).add(id);
+  return touched;
 }
 
 function toRelation(payload: RelatePayload): Relation {
@@ -232,6 +295,37 @@ export function provenanceOf(
 /** Every edge in the projection, in the order the log created them. */
 export function relationsIn(state: KnowledgeState): readonly Relation[] {
   return [...state.relations.values()];
+}
+
+/** Every merged-away id and the survivor it points at, one hop each. */
+export function redirectsIn(state: KnowledgeState): ReadonlyMap<string, string> {
+  return state.redirects;
+}
+
+/**
+ * **The id `id` resolves to, following the chain to its end** (ADR-0009).
+ *
+ * Merging #4891 into #4172 and later #4172 into #5310 must resolve #4891 all the
+ * way to #5310. A one-hop lookup answers that with #4172, which is an id that
+ * appears in no list view — so a proposal queued before the second merge would
+ * apply to an entity nobody can see.
+ *
+ * An id nothing merged away resolves to itself, so a caller needs no branch for
+ * the ordinary case.
+ *
+ * The step count is bounded by the number of redirects, which is what makes a
+ * corrupt cycle in the projection table terminate rather than hang every read.
+ * The fold cannot produce one — a merged-away id is gone, so nothing can merge
+ * it again — but this function also reads redirects loaded from a table.
+ */
+export function resolveRedirect(state: KnowledgeState, id: string): string {
+  let resolved = id;
+  for (let steps = 0; steps <= state.redirects.size; steps += 1) {
+    const next = state.redirects.get(resolved);
+    if (next === undefined) return resolved;
+    resolved = next;
+  }
+  return resolved;
 }
 
 export { emptyKnowledge };

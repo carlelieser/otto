@@ -38,6 +38,12 @@ INSERT INTO projection_field_provenance (
 
 const DELETE_ENTITY_SEARCH = `DELETE FROM projection_entity_search WHERE entity_id = ?`;
 
+const DELETE_ENTITY = `DELETE FROM projection_entities WHERE entity_id = ?`;
+
+const UPSERT_REDIRECT = `
+INSERT INTO projection_redirects (from_id, to_id) VALUES (@from_id, @to_id)
+ON CONFLICT (from_id) DO UPDATE SET to_id = excluded.to_id`;
+
 const INSERT_ENTITY_SEARCH = `
 INSERT INTO projection_entity_search (entity_id, entity_type, text) VALUES (?, ?, ?)`;
 
@@ -106,6 +112,32 @@ function writeProvenance(
 
 export function writeRelationRow(database: Database.Database, relation: Relation): void {
   database.prepare(INSERT_RELATION).run(toRelationParameters(relation));
+}
+
+/**
+ * A merged-away identity: its rows removed, and the redirect that replaces them
+ * written (ADR-0009).
+ *
+ * The delete and the insert belong together because they are one change to what
+ * the projection says about that id — "it is not an entity, it is a reference to
+ * one" — and a caller that did only the first would leave every pre-merge
+ * reference resolving to nothing.
+ *
+ * Its aliases, search text, and provenance go too. An alias left behind would
+ * keep returning the merged-away entity as a candidate for resolution, which is
+ * the duplicate the merge just resolved coming back through the door candidate
+ * generation reads.
+ */
+export function writeRedirectRow(
+  database: Database.Database,
+  mergedId: string,
+  survivorId: string,
+): void {
+  database.prepare(DELETE_ENTITY).run(mergedId);
+  database.prepare(DELETE_ALIASES).run(mergedId);
+  database.prepare(DELETE_PROVENANCE).run(mergedId);
+  database.prepare(DELETE_ENTITY_SEARCH).run(mergedId);
+  database.prepare(UPSERT_REDIRECT).run({ from_id: mergedId, to_id: survivorId });
 }
 
 const CLEAR_CAPTURE_INDEX = `DELETE FROM projection_capture_search`;

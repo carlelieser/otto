@@ -6,6 +6,7 @@ import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
 import { ProposalAdjudication } from "./application/pipeline/adjudicate-proposal.js";
+import { DuplicateDetection } from "./application/pipeline/detect-duplicates.js";
 import { CaptureTriage, type CorrectionCounts } from "./application/pipeline/triage-capture.js";
 import { ReviewQueue } from "./application/surface/read-review-queue.js";
 import { BootstrapStatus } from "./application/surface/read-bootstrap-status.js";
@@ -293,6 +294,26 @@ export function createReviewQueue(storage: Storage): ReviewQueue {
   return new ReviewQueue(storage.queue, storage.dispositions, storage.projections);
 }
 
+/**
+ * Duplicate detection, reading the entity projection and writing the queue.
+ *
+ * It is handed the one read it makes rather than the view store, for the reason
+ * `createCandidateReads` narrows resolution's: a stage that cannot search is one
+ * with nothing to search with. It reaches no executor at all, which is what
+ * makes "a merge never applies unattended" structural here rather than a rule
+ * this stage remembers — there is nothing on it to apply a Command with.
+ */
+export function createDuplicateDetection(
+  storage: Storage,
+  now: () => string = defaultClock,
+): DuplicateDetection {
+  return new DuplicateDetection({
+    entities: (type) => storage.views.entitiesOfType(type),
+    queue: storage.queue,
+    now,
+  });
+}
+
 /** Bootstrap status, so the dashboard can say why Otto is asking (`triage.md` §4). */
 export function createBootstrapStatus(storage: Storage): BootstrapStatus {
   return new BootstrapStatus(storage.corrections);
@@ -314,6 +335,7 @@ export function createAdjudication(
     queue: storage.queue,
     corrections: storage.corrections,
     currentVersionOf: (aggregateId) => storage.events.currentVersion(aggregateId),
+    resolveId: (aggregateId) => storage.views.resolveId(aggregateId),
     now,
   });
 }

@@ -25,6 +25,19 @@ ORDER BY relation_name, from_id, to_id`;
 
 const SELECT_PROVENANCE = `SELECT * FROM projection_field_provenance WHERE entity_id = ?`;
 
+const SELECT_REDIRECT = `SELECT to_id FROM projection_redirects WHERE from_id = ?`;
+
+/**
+ * How many redirects a chain is followed through before the walk gives up.
+ *
+ * A bound rather than a loop until exhaustion, because this walks a table rather
+ * than a map whose size is known: a cycle from a corrupt row would otherwise
+ * hang every read of that id. The fold cannot produce one — a merged-away id is
+ * gone, so nothing can merge it again — and a hundred is far past any chain a
+ * real history produces.
+ */
+const MAX_REDIRECT_HOPS = 100;
+
 const SEARCH_ENTITIES = `
 SELECT entity_id, entity_type FROM projection_entity_search
 WHERE projection_entity_search MATCH ? ORDER BY rank LIMIT ?`;
@@ -60,13 +73,40 @@ export class SqliteEntityViewStore implements EntityViewStore {
    * projection is what `add.md` §7 means by "a row and a handful of joins".
    */
   async entityView(id: string): Promise<EntityView | undefined> {
-    const row = this.#database.prepare(SELECT_ENTITY).get(id) as EntityRow | undefined;
+    const resolved = this.resolveId(id);
+    const row = this.#database.prepare(SELECT_ENTITY).get(resolved) as EntityRow | undefined;
     if (row === undefined) return undefined;
     return {
       entity: toEntity(row),
-      relations: this.#relationsOf(id),
-      provenance: this.#provenanceOf(id),
+      relations: this.#relationsOf(resolved),
+      provenance: this.#provenanceOf(resolved),
     };
+  }
+
+  /**
+   * **The id `id` resolves to, following the redirect chain** (ADR-0009).
+   *
+   * The two places a merged-away id is still encountered are both reads: a
+   * proposal queued before the merge, and provenance display for an event whose
+   * target is immutably the old id. Both arrive here, which is why resolution
+   * lives on the read path rather than at the moment of merging — nothing had to
+   * touch the review queue, and no event was rewritten.
+   *
+   * Chains rather than one hop: merging #4891 into #4172 and later #4172 into
+   * #5310 must resolve #4891 all the way to #5310. A one-hop lookup answers with
+   * an id that appears in no list view.
+   *
+   * An id nothing merged away resolves to itself, so a caller needs no branch.
+   */
+  resolveId(id: string): string {
+    const select = this.#database.prepare(SELECT_REDIRECT);
+    let resolved = id;
+    for (let hop = 0; hop < MAX_REDIRECT_HOPS; hop += 1) {
+      const row = select.get(resolved) as { to_id: string } | undefined;
+      if (row === undefined) return resolved;
+      resolved = row.to_id;
+    }
+    return resolved;
   }
 
   #relationsOf(id: string): readonly Relation[] {

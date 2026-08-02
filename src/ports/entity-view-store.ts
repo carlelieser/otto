@@ -30,6 +30,24 @@ export interface EntityViewStore {
    */
   entityView(id: string): Promise<EntityView | undefined>;
 
+  /**
+   * The id `id` resolves to, following the redirect chain to its end
+   * (ADR-0009).
+   *
+   * On this port because it is a read, and because the two places a merged-away
+   * id survives are both reads: a proposal queued before a merge and approved a
+   * week after, and provenance display for an event whose target is immutably
+   * the old id. Resolving on read is what lets a merge touch neither the review
+   * queue nor the log.
+   *
+   * Synchronous, unlike everything else here: it is one indexed lookup per hop
+   * against a table that is almost always empty, and the callers that need it
+   * are already inside an `await` of their own.
+   *
+   * An id nothing merged away resolves to itself.
+   */
+  resolveId(id: string): string;
+
   /** Every entity of a type, name-ordered. The list behind a type's index page. */
   entitiesOfType(type: EntityType): Promise<readonly Entity[]>;
 

@@ -24,6 +24,15 @@ export interface SnapshotState {
   readonly entities: readonly [string, SnapshotEntity][];
   readonly provenance: readonly [string, readonly [string, FieldProvenance][]][];
   readonly relations: readonly Relation[];
+  /**
+   * The redirect chain, as pairs.
+   *
+   * Optional on the way in because a snapshot written before merge shipped has
+   * no such key, and a rebuild resuming from one must not be refused — the
+   * events after it will rebuild the redirects the log holds. Absent means "no
+   * merges yet", which is what a pre-merge snapshot in fact recorded.
+   */
+  readonly redirects?: readonly [string, string][];
 }
 
 /** An entity without its id, which is the key it is stored under. */
@@ -39,6 +48,7 @@ export function toSnapshotState(state: KnowledgeState): SnapshotState {
     entities: [...state.entities].map(([id, entity]) => [id, withoutId(entity)]),
     provenance: [...state.provenance].map(([id, pointers]) => [id, [...pointers]]),
     relations: [...state.relations.values()],
+    redirects: [...state.redirects],
   };
 }
 
@@ -63,6 +73,7 @@ export function fromSnapshotState(value: unknown): KnowledgeState | undefined {
     ),
     provenance: new Map(value.provenance.map(([id, pointers]) => [id, new Map(pointers)])),
     relations: new Map(value.relations.map((relation) => [relationKey(relation), relation])),
+    redirects: new Map(value.redirects ?? []),
     touched: nothingTouched(),
   };
 }

@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import {
   createAdjudication,
   createBootstrapStatus,
+  createDuplicateDetection,
   createExtraction,
   createExtractor,
   createIngestion,
@@ -67,6 +68,7 @@ async function startCaptureSidecar(): Promise<void> {
       review: createReviewQueue(storage),
       adjudication: createAdjudication(storage),
       bootstrap: createBootstrapStatus(storage),
+      duplicates: createDuplicateDetection(storage),
     }),
   );
 }

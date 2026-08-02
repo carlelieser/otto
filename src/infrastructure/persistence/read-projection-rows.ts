@@ -16,6 +16,8 @@ const SELECT_PROVENANCE = `SELECT * FROM projection_field_provenance`;
 
 const SELECT_RELATIONS = `SELECT * FROM projection_relations`;
 
+const SELECT_REDIRECTS = `SELECT from_id, to_id FROM projection_redirects`;
+
 /**
  * The projection tables read back into the shape the fold produces.
  *
@@ -33,9 +35,27 @@ export function readKnowledge(database: Database.Database): KnowledgeState {
     entities: readEntities(database),
     provenance: readProvenance(database),
     relations: readRelations(database),
+    redirects: readRedirects(database),
     // Nothing is pending: every row here is already written, by definition.
     touched: nothingTouched(),
   };
+}
+
+/**
+ * The redirect table as the one-hop map the fold holds.
+ *
+ * Read whole rather than queried per id, for the reason provenance is grouped
+ * here: resuming a projection is one read, and a chain resolved by walking the
+ * table would be a query per hop against a map that is already in memory.
+ */
+function readRedirects(database: Database.Database): ReadonlyMap<string, string> {
+  const rows = database.prepare(SELECT_REDIRECTS).all() as RedirectRow[];
+  return new Map(rows.map((row) => [row.from_id, row.to_id]));
+}
+
+interface RedirectRow {
+  readonly from_id: string;
+  readonly to_id: string;
 }
 
 function readEntities(database: Database.Database): ReadonlyMap<string, Entity> {

@@ -9,7 +9,12 @@ import {
 } from "../../ports/projection-store.js";
 import { PROJECTION_TABLES, SEARCH_TABLES } from "./projection-tables.js";
 import { readKnowledge } from "./read-projection-rows.js";
-import { indexCaptureRows, writeEntityRows, writeRelationRow } from "./write-projection-rows.js";
+import {
+  indexCaptureRows,
+  writeEntityRows,
+  writeRedirectRow,
+  writeRelationRow,
+} from "./write-projection-rows.js";
 
 const SELECT_CHECKPOINT = `
 SELECT position, is_rebuilding FROM projection_position WHERE projection_name = ?`;
@@ -51,12 +56,29 @@ export class SqliteProjectionStore implements ProjectionStore {
    * model doing too much work per event. The touched set comes from the fold,
    * which already knows what it wrote.
    */
+  /**
+   * Merges are applied **after** the entity writes, and that order is
+   * load-bearing.
+   *
+   * A batch holding both an entity's creation and its merging away touches it
+   * twice: once as an entity to write and once as an id to remove. Writing the
+   * rows first and then removing them leaves the projection saying what the log
+   * says. The reverse order would delete the row and then re-insert it, which is
+   * a merged-away entity reappearing in every list view — visible only for logs
+   * where a merge lands in the same batch as its loser's last change.
+   */
   async write(state: KnowledgeState, position: LogPosition): Promise<void> {
     this.#database.transaction(() => {
       for (const id of state.touched.entities) this.#writeEntity(state, id);
       for (const key of state.touched.relations) this.#writeRelation(state, key);
+      for (const id of state.touched.merged) this.#writeRedirect(state, id);
       this.#recordPosition(position, false);
     })();
+  }
+
+  #writeRedirect(state: KnowledgeState, mergedId: string): void {
+    const survivorId = state.redirects.get(mergedId);
+    if (survivorId !== undefined) writeRedirectRow(this.#database, mergedId, survivorId);
   }
 
   #writeEntity(state: KnowledgeState, id: string): void {
