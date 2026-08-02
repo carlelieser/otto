@@ -1,7 +1,10 @@
+import type { CaptureExtraction } from "../../application/pipeline/extract-capture.js";
 import type { CaptureIngestion } from "../../application/pipeline/ingest-capture.js";
+import type { CaptureStore } from "../../ports/capture-store.js";
 import type { Transcriber } from "../../ports/transcriber.js";
 import { captureMethods } from "./capture-methods.js";
 import type { Methods } from "./dispatch.js";
+import { extractionMethods } from "./extraction-methods.js";
 
 /**
  * Everything the sidecar answers.
@@ -18,13 +21,33 @@ import type { Methods } from "./dispatch.js";
 export function sidecarMethods(capture?: CaptureDependencies): Methods {
   const base = { ping, exit: exitNow };
   if (capture === undefined) return base;
-  return { ...base, ...captureMethods(capture.ingestion, capture.transcriber) };
+  return {
+    ...base,
+    ...captureMethods(capture.ingestion, capture.transcriber),
+    ...extractionMethodsFor(capture),
+  };
 }
 
-/** What the capture methods need. Absent in the transport's own tests. */
+/**
+ * The extraction method, when there is an extractor to serve it with.
+ *
+ * Optional for the same reason the capture methods are omitted without an
+ * ingestion: a test about the crash window or the transport has nothing to
+ * extract with and should not have to construct one to say so. The real sidecar
+ * always passes both.
+ */
+function extractionMethodsFor(capture: CaptureDependencies): Methods {
+  if (capture.extraction === undefined || capture.captures === undefined) return {};
+  return extractionMethods(capture.extraction, capture.captures);
+}
+
+/** What the capture and extraction methods need. Absent in the transport's own tests. */
 export interface CaptureDependencies {
   readonly ingestion: CaptureIngestion;
   readonly transcriber: Transcriber;
+  readonly extraction?: CaptureExtraction;
+  /** Extraction reads a *stored* Capture, so the method needs to fetch one. */
+  readonly captures?: CaptureStore;
 }
 
 /**

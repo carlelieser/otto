@@ -57,6 +57,26 @@ const REFUSED_MUTATIONS = [
  * to `events` on `capture_id`. Slice 0 indexed only `(aggregate_id,
  * aggregate_version)`; the sweep is the first query to need this one, and the
  * provenance lookups in Slice 6 walk the same column.
+ *
+ * ## `extraction_proposals` has no immutability triggers, and that is deliberate
+ *
+ * Slice 3 adds a third table and does *not* make it a third table that is truth.
+ * A Proposal is not a change to knowledge — it is a claim awaiting triage, and
+ * most never become events at all, since a discarded Proposal is recorded and
+ * never applied (`add.md` §5.5). It is derived state: everything in it is
+ * reproducible from the Capture and the named model, which is exactly what
+ * `runtime.md` §3's id derivation guarantees.
+ *
+ * So it is rebuildable rather than protected, which is the property that makes
+ * re-extraction possible at all. Adding the triggers here would read as
+ * consistency and would in fact forbid the scoped re-extraction `runtime.md` §3
+ * calls a tool for recovering from a known-bad extraction period.
+ *
+ * `mention` holds the Mention as JSON rather than as columns. It is read whole
+ * by the stage that consumes it and never queried by field, and the alternative
+ * — a row per claimed field value — is a schema that has to change every time
+ * `schema.md` does, which is the coupling `entity-schema.ts` exists to keep in
+ * one place.
  */
 export const CREATE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS captures (
@@ -88,8 +108,19 @@ CREATE TABLE IF NOT EXISTS events (
   recorded_at         TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS extraction_proposals (
+  proposal_id         TEXT PRIMARY KEY,
+  capture_id          TEXT NOT NULL,
+  ordinal             INTEGER NOT NULL,
+  mention             TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  model_version       TEXT NOT NULL,
+  extracted_at        TEXT NOT NULL
+) STRICT;
+
 CREATE INDEX IF NOT EXISTS events_by_aggregate ON events (aggregate_id, aggregate_version);
 CREATE INDEX IF NOT EXISTS events_by_capture ON events (capture_id);
+CREATE INDEX IF NOT EXISTS proposals_by_capture ON extraction_proposals (capture_id, ordinal);
 
 ${insertOnlyTriggers("events")}
 ${insertOnlyTriggers("captures")}
