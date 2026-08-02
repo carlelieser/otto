@@ -5,8 +5,12 @@ import {
   createStorage,
   type Storage,
 } from "../../src/composition-root.js";
+import {
+  AnthropicExtractor,
+  ANTHROPIC_PROVIDER,
+} from "../../src/infrastructure/llm/anthropic-extractor.js";
 import { InMemoryExtractor } from "../../src/infrastructure/llm/in-memory-extractor.js";
-import { LOCAL_PROVIDER } from "../../src/infrastructure/llm/local-extractor.js";
+import { LocalExtractor } from "../../src/infrastructure/llm/local-extractor.js";
 import { aCapture } from "../support/builders.js";
 import { EVAL_CORPUS } from "./corpus/notes.js";
 import { runCorpus } from "./run-corpus.js";
@@ -47,6 +51,19 @@ describe("with no provider configured", () => {
     }
   });
 
+  /**
+   * Every assertion below names the adapter `createExtractor` returned, rather
+   * than checking that construction did not throw.
+   *
+   * That is the difference between this file passing and this file meaning
+   * something. A factory handing back a cloud adapter holding an empty key
+   * satisfies "does not throw" and then fails on the first note with a 401 —
+   * the stalled state `qa.md` §6.3 says must not happen, reached by the one
+   * route a looser assertion cannot see. Checked by construction rather than by
+   * a call, because calling a cloud adapter would put a request to a real
+   * vendor in the default suite.
+   */
+
   it("builds an extractor rather than throwing", () => {
     expect(() => createExtractor()).not.toThrow();
   });
@@ -56,14 +73,8 @@ describe("with no provider configured", () => {
    * failure — which is why the unconfigured path resolves to it directly rather
    * than to an error the caller has to handle.
    */
-  it("defaults to the local path", async () => {
-    const extractor = createExtractor();
-
-    // The adapter is identified by what it records on its output, since that is
-    // the property the rest of the system actually reads (ADR-0008).
-    await expect(
-      extractor.extract({ text: "anything", capturedAt: "2026-08-03T09:00:00.000Z" }),
-    ).rejects.toThrow(new RegExp(LOCAL_PROVIDER));
+  it("defaults to the local path", () => {
+    expect(createExtractor()).toBeInstanceOf(LocalExtractor);
   });
 
   /**
@@ -73,15 +84,38 @@ describe("with no provider configured", () => {
    * paying for an upgrade.
    */
   it("falls back to local when a configured key is removed", () => {
-    process.env.OTTO_EXTRACTION_PROVIDER = "anthropic";
+    process.env.OTTO_EXTRACTION_PROVIDER = ANTHROPIC_PROVIDER;
 
-    expect(() => createExtractor()).not.toThrow();
+    expect(createExtractor()).toBeInstanceOf(LocalExtractor);
   });
 
   it("falls back to local when the provider name is not one Otto has an adapter for", () => {
     process.env.OTTO_EXTRACTION_PROVIDER = "a-typo";
 
-    expect(() => createExtractor()).not.toThrow();
+    expect(createExtractor()).toBeInstanceOf(LocalExtractor);
+  });
+
+  /**
+   * The other half of the same rule: a provider that *is* configured is the one
+   * that runs. A fallback that fired regardless of the key would pass every
+   * test above and quietly ignore what the user paid for.
+   *
+   * Checked by construction rather than by a call, because calling would put a
+   * request to a real vendor inside the default suite — and this file's whole
+   * subject is what happens with no credentials, which is not a thing to prove
+   * by spending someone's.
+   */
+  it("uses the configured provider when its key is present", () => {
+    process.env.OTTO_EXTRACTION_PROVIDER = ANTHROPIC_PROVIDER;
+    process.env.ANTHROPIC_API_KEY = "sk-not-a-real-key";
+
+    expect(createExtractor()).toBeInstanceOf(AnthropicExtractor);
+  });
+
+  it("returns the local adapter, not a keyless cloud one, when the key is absent", () => {
+    process.env.OTTO_EXTRACTION_PROVIDER = ANTHROPIC_PROVIDER;
+
+    expect(createExtractor()).toBeInstanceOf(LocalExtractor);
   });
 
   describe("the full pipeline", () => {
