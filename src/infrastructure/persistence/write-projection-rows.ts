@@ -108,6 +108,40 @@ export function writeRelationRow(database: Database.Database, relation: Relation
   database.prepare(INSERT_RELATION).run(toRelationParameters(relation));
 }
 
+const CLEAR_CAPTURE_INDEX = `DELETE FROM projection_capture_search`;
+
+/**
+ * Captures indexed from the table that is truth rather than from the log.
+ *
+ * A Capture's text is in no event, so this projection is built from `captures`
+ * directly — a projection of truth rather than of the log, which the
+ * `projection_` prefix still describes accurately: derived, droppable, and
+ * rebuildable from a table that cannot lose rows.
+ *
+ * Wholesale rather than incremental, because FTS5 has no upsert and 10,000
+ * Captures is a few milliseconds. `COALESCE` prefers the corrected transcript
+ * over the raw one, so Slice 9's corrections become searchable by being
+ * written rather than by anything here changing.
+ */
+const SELECT_CAPTURE_TEXT = `
+SELECT capture_id, COALESCE(corrected_text, raw_text) AS text FROM captures`;
+
+const INSERT_CAPTURE_INDEX = `
+INSERT INTO projection_capture_search (capture_id, text) VALUES (?, ?)`;
+
+export function indexCaptureRows(database: Database.Database): void {
+  database.prepare(CLEAR_CAPTURE_INDEX).run();
+  const insert = database.prepare(INSERT_CAPTURE_INDEX);
+  for (const row of database.prepare(SELECT_CAPTURE_TEXT).all() as CaptureTextRow[]) {
+    insert.run(row.capture_id, row.text);
+  }
+}
+
+interface CaptureTextRow {
+  readonly capture_id: string;
+  readonly text: string;
+}
+
 /**
  * Every text value on an entity, joined for the full-text index.
  *

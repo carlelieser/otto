@@ -33,31 +33,16 @@ const SEARCH_CAPTURES = `
 SELECT capture_id, text FROM projection_capture_search
 WHERE projection_capture_search MATCH ? ORDER BY rank LIMIT ?`;
 
-const CLEAR_CAPTURE_INDEX = `DELETE FROM projection_capture_search`;
-
-/**
- * Captures indexed from the table that is truth rather than from the log.
- *
- * A Capture's text is not in any event — `CaptureIngested` carries the id and
- * the hash — so this projection is built from `captures` directly. That is a
- * projection of truth rather than of the log, which the `projection_` prefix
- * still describes accurately: it is derived, droppable, and rebuildable from a
- * table that cannot lose rows.
- */
-const SELECT_CAPTURE_TEXT = `
-SELECT capture_id, COALESCE(corrected_text, raw_text) AS text FROM captures`;
-
-const INSERT_CAPTURE_INDEX = `
-INSERT INTO projection_capture_search (capture_id, text) VALUES (?, ?)`;
-
 /**
  * The read surfaces the dashboard queries (`add.md` §7).
  *
  * Reads only, and the absence of a write method is the same structural
  * narrowing `EntityRepository` uses: what the UI cannot do to the projection is
  * an interface with nothing on it to do, rather than a rule someone remembers.
- * The one exception is `indexCaptures`, which is projection work rather than a
- * UI operation — see its own comment.
+ *
+ * Maintaining the indexes it searches is the projection worker's, through
+ * `ProjectionStore` — including the Capture index, which is rebuilt from the
+ * `captures` table because no event carries a Capture's text.
  */
 export class SqliteEntityViewStore implements EntityViewStore {
   readonly #database: Database.Database;
@@ -118,26 +103,6 @@ export class SqliteEntityViewStore implements EntityViewStore {
       entityType: row.entity_type as EntityType,
     }));
   }
-
-  /**
-   * Rebuilds the Capture search index from the `captures` table.
-   *
-   * A write method on a read adapter, which is worth justifying rather than
-   * hiding: the entity index is maintained by the projection worker as it folds
-   * events, but Capture text never appears in an event, so there is nothing for
-   * the worker to fold. The index is rebuilt wholesale instead — cheap at
-   * 10,000 Captures, and it keeps the alternative off the table, which would be
-   * a trigger on `captures` tying a projection to the write path.
-   */
-  async indexCaptures(): Promise<void> {
-    this.#database.transaction(() => {
-      this.#database.prepare(CLEAR_CAPTURE_INDEX).run();
-      const insert = this.#database.prepare(INSERT_CAPTURE_INDEX);
-      for (const row of this.#database.prepare(SELECT_CAPTURE_TEXT).all() as CaptureTextRow[]) {
-        insert.run(row.capture_id, row.text);
-      }
-    })();
-  }
 }
 
 interface CaptureSearchRow {
@@ -148,9 +113,4 @@ interface CaptureSearchRow {
 interface EntitySearchRow {
   readonly entity_id: string;
   readonly entity_type: string;
-}
-
-interface CaptureTextRow {
-  readonly capture_id: string;
-  readonly text: string;
 }

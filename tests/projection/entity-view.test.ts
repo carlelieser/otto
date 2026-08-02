@@ -17,6 +17,7 @@ import {
 let events: EventStore;
 let views: SqliteEntityViewStore;
 let captures: SqliteCaptureStore;
+let projections: SqliteProjectionStore;
 let worker: ProjectionWorker;
 
 beforeEach(() => {
@@ -24,11 +25,8 @@ beforeEach(() => {
   events = new SqliteEventStore(database);
   captures = new SqliteCaptureStore(database);
   views = new SqliteEntityViewStore(database);
-  worker = new ProjectionWorker({
-    events,
-    projections: new SqliteProjectionStore(database),
-    upcasts: new UpcastRegistry(),
-  });
+  projections = new SqliteProjectionStore(database);
+  worker = new ProjectionWorker({ events, projections, upcasts: new UpcastRegistry() });
 });
 
 describe("the entity view", () => {
@@ -199,7 +197,7 @@ describe("full-text search over entities", () => {
 describe("full-text search over Captures", () => {
   it("finds a Capture by a word in its text", async () => {
     await captures.put(aCapture("cap-1", "Coffee with Sarah about Helios"));
-    await views.indexCaptures();
+    await projections.reindexCaptures();
 
     const hits = await views.searchCaptures("Helios");
 
@@ -208,7 +206,7 @@ describe("full-text search over Captures", () => {
 
   it("returns nothing for a term no Capture holds", async () => {
     await captures.put(aCapture("cap-1", "Coffee with Sarah"));
-    await views.indexCaptures();
+    await projections.reindexCaptures();
 
     expect(await views.searchCaptures("Globex")).toEqual([]);
   });
@@ -216,8 +214,24 @@ describe("full-text search over Captures", () => {
   /** Indexing twice must not return one Capture twice. */
   it("indexes a Capture once however often it is reindexed", async () => {
     await captures.put(aCapture("cap-1", "Coffee with Sarah"));
-    await views.indexCaptures();
-    await views.indexCaptures();
+    await projections.reindexCaptures();
+    await projections.reindexCaptures();
+
+    expect(await views.searchCaptures("Sarah")).toHaveLength(1);
+  });
+
+  /**
+   * A rebuild must put the Capture index back.
+   *
+   * `reset` empties it and no event carries a Capture's text, so a rebuild that
+   * only replayed the log would leave Capture search silently returning
+   * nothing — ADR-0005's routine operation destroying a read surface.
+   */
+  it("still finds Captures after a full rebuild", async () => {
+    await captures.put(aCapture("cap-1", "Coffee with Sarah"));
+    await projections.reindexCaptures();
+
+    await worker.rebuild();
 
     expect(await views.searchCaptures("Sarah")).toHaveLength(1);
   });
@@ -226,7 +240,7 @@ describe("full-text search over Captures", () => {
     for (let index = 0; index < 5; index += 1) {
       await captures.put(aCapture(`cap-${index}`, "Sarah again"));
     }
-    await views.indexCaptures();
+    await projections.reindexCaptures();
 
     expect(await views.searchCaptures("Sarah", 2)).toHaveLength(2);
   });

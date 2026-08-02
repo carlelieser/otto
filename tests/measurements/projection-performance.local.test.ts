@@ -1,5 +1,5 @@
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
-import { arch, platform, tmpdir } from "node:os";
+import { statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ProjectionWorker } from "../../src/application/projection/projection-worker.js";
@@ -17,6 +17,7 @@ import {
   syntheticLog,
 } from "../support/synthetic-corpus.js";
 import { anEntityCreated } from "../support/projection-builders.js";
+import { writePerformanceBaseline } from "../support/performance-baseline.js";
 
 /**
  * **`qa.md` §8's seven bars, against the real projector.**
@@ -49,8 +50,6 @@ const BARS = {
   databaseSize: { baseline_mb: 47.8, bar_mb: 2_048, fail_mb: 10_240 },
 } as const;
 
-const BASELINE_PATH = join(process.cwd(), "tests/baselines/projection-performance.json");
-
 /**
  * On disk rather than `:memory:`, because one of the seven bars is the file's
  * size and because WAL — which the append bar is about — does nothing without
@@ -78,7 +77,7 @@ beforeAll(async () => {
 }, 600_000);
 
 afterAll(() => {
-  writeBaseline();
+  writePerformanceBaseline(results, BARS);
   database.close();
 });
 
@@ -189,7 +188,7 @@ describe("the entity view query", () => {
 
 describe("full-text search over Captures", () => {
   it("returns matches within the standing bar", async () => {
-    await views.indexCaptures();
+    await projections.reindexCaptures();
 
     const durations = await timeRuns(100, async () => {
       const hits = await views.searchCaptures("Helios");
@@ -199,6 +198,25 @@ describe("full-text search over Captures", () => {
     results["capture_search_ms"] = percentile(durations, 0.95);
 
     expect(results["capture_search_ms"]).toBeLessThanOrEqual(BARS.captureSearch.bar_ms);
+  });
+
+  /**
+   * Entity search has no row in `qa.md` §8, and is timed against the Capture
+   * bar.
+   *
+   * §8's table predates this index existing — the spike had no entity FTS to
+   * measure. It is the same kind of query over a smaller corpus, so the Capture
+   * bar is the honest one to hold it to rather than inventing a looser number
+   * for the measurement that has no baseline to drift from.
+   */
+  it("searches entities within the Capture bar", async () => {
+    const durations = await timeRuns(100, async () => {
+      const hits = await views.searchEntities("Entity");
+      expect(hits.length).toBeGreaterThan(0);
+    });
+    results["entity_search_ms"] = percentile(durations, 0.95);
+
+    expect(results["entity_search_ms"]).toBeLessThanOrEqual(BARS.captureSearch.bar_ms);
   });
 });
 
@@ -273,50 +291,4 @@ async function timeRuns(
 function percentile(durations: readonly number[], fraction: number): number {
   const sorted = [...durations].sort((left, right) => left - right);
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))]!;
-}
-
-function writeBaseline(): void {
-  mkdirSync(join(process.cwd(), "tests/baselines"), { recursive: true });
-  writeFileSync(
-    BASELINE_PATH,
-    `${JSON.stringify(
-      {
-        measurement: "projection-performance",
-        what_is_timed:
-          "qa.md §8's seven bars against the real projector, on the specified " +
-          "synthetic corpus. The spike's harness was throwaway and its projection " +
-          "logic was a stand-in, so its numbers are the baseline column rather " +
-          "than a comparable result.",
-        corpus: { ...CORPUS, events: 44_000 },
-        results,
-        bars: BARS,
-        note:
-          "Watch movement against the baseline column, not distance from the " +
-          "fail column. If several degrade together, the projection model is " +
-          "doing too much work per event — a design finding, not a reason to " +
-          "change database.",
-        reading_against_the_spike:
-          "Four of six are at or better than the spike. Two are not, and the " +
-          "gap is structural rather than a regression: rebuild is 8.4 s " +
-          "against a 215 ms baseline, and 100-event catch-up is 145 ms " +
-          "against 11.6 ms. The spike's projection logic was a stand-in that " +
-          "wrote entity rows only. This projector also writes a provenance " +
-          "row per field (add.md §7) and maintains an FTS index, which is " +
-          "roughly three writes per event where the spike did one. Both stay " +
-          "inside their bars — 7x and 3.5x — so the cost is accepted rather " +
-          "than tuned. These figures, not the spike's, are the baseline the " +
-          "next slice compares against.",
-        what_would_be_a_regression:
-          "Rebuild past ~20 s or catch-up past ~300 ms, either of which would " +
-          "mean per-event work grew again without a feature to show for it. " +
-          "The first thing to examine is SqliteProjectionStore.write, which " +
-          "persists only the entities a batch touched — writing all of them " +
-          "was measured at 29 s rebuild and 1.3 s catch-up.",
-        machine: arch(),
-        os: platform(),
-      },
-      null,
-      2,
-    )}\n`,
-  );
 }

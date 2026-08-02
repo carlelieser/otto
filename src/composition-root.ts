@@ -5,14 +5,6 @@ import { type CommandTranslator, Executor } from "./application/pipeline/execute
 import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
-import { ProjectionWorker } from "./application/projection/projection-worker.js";
-import type { SnapshotStore } from "./application/projection/snapshot.js";
-import { KnowledgeReads } from "./application/surface/read-knowledge.js";
-import {
-  KNOWLEDGE_EVENT_TYPES,
-  KNOWLEDGE_EVENT_VERSION,
-} from "./domain/events/knowledge-events.js";
-import { identityUpcast, UpcastRegistry } from "./domain/events/upcast-registry.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";
 import { SqliteEntityViewStore } from "./infrastructure/persistence/sqlite-entity-view-store.js";
 import { SqliteProjectionStore } from "./infrastructure/persistence/sqlite-projection-store.js";
@@ -143,47 +135,17 @@ function projectionStores(database: Database.Database) {
 }
 
 /**
- * The projection worker, wired to the log and the projection tables.
+ * Re-exported so callers keep one import path for wiring.
  *
- * The upcast registry is built here rather than held as a module constant: it
- * is composition, and every knowledge event ships at version 1 with an identity
- * upcast (ADR-0011). What this buys is that the *seam* is exercised in
- * production rather than only in a test — a registry nothing consults is one
- * that has quietly stopped working by event type #20.
+ * The projection worker, its upcasts, and the read surfaces are assembled in
+ * `composition/projection-wiring.ts`; that they moved is not something a caller
+ * of the root should have to notice.
  */
-export function createProjectionWorker(
-  storage: Storage,
-  snapshots?: SnapshotStore,
-): ProjectionWorker {
-  return new ProjectionWorker({
-    events: storage.events,
-    projections: storage.projections,
-    upcasts: createUpcastRegistry(),
-    ...(snapshots === undefined ? {} : { snapshots }),
-  });
-}
-
-/**
- * Every event type at its current version, each with an identity upcast.
- *
- * ADR-0011's cost, stated plainly: these accumulate and can never be deleted.
- * A new payload shape is a new version with an upcast from the old one, added
- * here — never an edit to an existing entry, which would rewrite the meaning of
- * events already in the log.
- */
-export function createUpcastRegistry(): UpcastRegistry {
-  const upcasts = new UpcastRegistry();
-  for (const type of KNOWLEDGE_EVENT_TYPES) {
-    upcasts.declareCurrentVersion(type, KNOWLEDGE_EVENT_VERSION);
-    upcasts.register({ type, fromVersion: KNOWLEDGE_EVENT_VERSION, upcast: identityUpcast });
-  }
-  return upcasts;
-}
-
-/** The read path, wired to the projection tables. */
-export function createKnowledgeReads(storage: Storage): KnowledgeReads {
-  return new KnowledgeReads(storage.views, storage.projections);
-}
+export {
+  createKnowledgeReads,
+  createProjectionWorker,
+  createUpcastRegistry,
+} from "./composition/projection-wiring.js";
 
 /**
  * The embedder, which is local always and has no cloud option

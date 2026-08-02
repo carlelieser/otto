@@ -9,7 +9,7 @@ import {
 } from "../../ports/projection-store.js";
 import { PROJECTION_TABLES, SEARCH_TABLES } from "./projection-tables.js";
 import { readKnowledge } from "./read-projection-rows.js";
-import { writeEntityRows, writeRelationRow } from "./write-projection-rows.js";
+import { indexCaptureRows, writeEntityRows, writeRelationRow } from "./write-projection-rows.js";
 
 const SELECT_CHECKPOINT = `
 SELECT position, is_rebuilding FROM projection_position WHERE projection_name = ?`;
@@ -80,6 +80,10 @@ export class SqliteProjectionStore implements ProjectionStore {
         this.#database.prepare(`DELETE FROM ${table}`).run();
       }
     })();
+  }
+
+  async reindexCaptures(): Promise<void> {
+    this.#database.transaction(() => indexCaptureRows(this.#database))();
   }
 
   async checkpoint(): Promise<Checkpoint> {

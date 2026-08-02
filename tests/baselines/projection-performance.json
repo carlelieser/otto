@@ -1,19 +1,20 @@
 {
   "measurement": "projection-performance",
-  "what_is_timed": "qa.md §8's seven bars against the real projector, on the specified synthetic corpus. The spike's harness was throwaway and its projection logic was a stand-in, so its numbers are the baseline column rather than a comparable result.",
+  "what_is_timed": "qa.md §8's bars against the real projector, on the specified synthetic corpus. The spike's harness was throwaway and its projection logic was a stand-in, so its numbers are the baseline column rather than a comparable result. Vector search is the seventh bar and is measured separately, in tests/baselines/vector-search.json, because ADR-0021 changed what it runs on.",
   "corpus": {
     "captures": 10000,
     "entities": 3000,
     "relations": 10000,
-    "events": 44000
+    "events": 43000
   },
   "results": {
-    "rebuild_ms": 8159.92025,
-    "catch_up_ms": 133.72825000000012,
-    "entity_view_ms": 0.09475000000020373,
-    "capture_search_ms": 0.600417000001471,
-    "append_ms": 0.10470799999893643,
-    "database_size_mb": 21.46484375
+    "rebuild_ms": 8016.737917,
+    "catch_up_ms": 130.72475000000122,
+    "entity_view_ms": 0.07745799999975134,
+    "capture_search_ms": 0.11516599999958999,
+    "entity_search_ms": 1.4163750000006985,
+    "append_ms": 0.09666699999797856,
+    "database_size_mb": 22.796875
   },
   "bars": {
     "rebuild": {

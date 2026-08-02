@@ -3,10 +3,11 @@ import type { UpcastRegistry } from "../../domain/events/upcast-registry.js";
 import { applyEvents } from "../../domain/knowledge/project-entity.js";
 import {
   emptyKnowledge,
+  markEverythingTouched,
   markWritten,
   type KnowledgeState,
 } from "../../domain/knowledge/projected-state.js";
-import { serialiseKnowledge } from "../../domain/knowledge/serialise-knowledge.js";
+import { fromSnapshotState, toSnapshotState } from "../../domain/knowledge/snapshot-state.js";
 import { FROM_START, type EventStore } from "../../ports/event-store.js";
 import { KNOWLEDGE_PROJECTION, type ProjectionStore } from "../../ports/projection-store.js";
 import {
@@ -86,14 +87,73 @@ export class ProjectionWorker {
    * The rebuild flag is set before the first row is written and cleared after
    * the last, so a crash in between leaves the projection visibly incomplete
    * rather than silently short (`qa.md` §7.1).
+   *
+   * The Capture index is rebuilt too. `reset` empties it and no event carries
+   * Capture text, so a rebuild that only replayed the log would leave Capture
+   * search returning nothing — the routine operation of ADR-0005 quietly
+   * destroying a read surface.
    */
   async rebuild(): Promise<LogPosition> {
     const { projections } = this.#dependencies;
     await projections.reset();
     await projections.beginRebuild();
     const position = await this.#foldFrom(FROM_START, emptyKnowledge());
+    await projections.reindexCaptures();
     await projections.finishRebuild(position);
     return position;
+  }
+
+  /**
+   * Rebuilds from the most recent snapshot, or from event zero when there is
+   * none.
+   *
+   * `runtime.md` §4.1 sets the cadence to never, so in production this is
+   * always the second case. The path exists because the mechanism is the
+   * expensive part to add later, and because a snapshot nothing ever reads is
+   * one that could hold anything — `qa.md` §7.1 asks that rebuilding from a
+   * snapshot equal rebuilding from event zero, which is a property about this
+   * method rather than about the store that keeps them.
+   *
+   * A snapshot that will not deserialise is discarded and the rebuild proceeds
+   * from zero. Snapshots are derived and disposable, so a corrupt one costs a
+   * replay and never data (`add.md` §6).
+   */
+  async rebuildFromSnapshot(): Promise<LogPosition> {
+    const { projections, snapshots } = this.#dependencies;
+    const resumed = snapshots === undefined ? undefined : await this.#resume(snapshots);
+    if (resumed === undefined) return this.rebuild();
+    await projections.reset();
+    await projections.beginRebuild();
+    return this.#finishFrom(resumed);
+  }
+
+  /**
+   * Writes the snapshot's state, then folds everything after it.
+   *
+   * The restored state is marked entirely touched first: `reset` has just
+   * emptied the tables, so none of it is in them, and a state carrying the
+   * empty touched set a snapshot deserialises with would be written as nothing.
+   */
+  async #finishFrom(resumed: ResumePoint): Promise<LogPosition> {
+    const { projections } = this.#dependencies;
+    const restored = markEverythingTouched(resumed.state);
+    await projections.write(restored, resumed.position);
+    const position = await this.#foldFrom(resumed.position, markWritten(restored));
+    await projections.reindexCaptures();
+    await projections.finishRebuild(position);
+    return position;
+  }
+
+  /** The state a snapshot holds, or `undefined` when there is none to resume from. */
+  async #resume(snapshots: SnapshotStore): Promise<ResumePoint | undefined> {
+    const snapshot = await snapshots.latest(KNOWLEDGE_PROJECTION);
+    if (snapshot === null) return undefined;
+    const state = fromSnapshotState(snapshot.state);
+    if (state === undefined) {
+      await snapshots.discard(KNOWLEDGE_PROJECTION);
+      return undefined;
+    }
+    return { state, position: snapshot.position };
   }
 
   /**
@@ -174,17 +234,23 @@ async function saveIfDue(
 }
 
 /**
- * A snapshot holds the serialised state rather than the maps themselves.
+ * A snapshot holds the round-trippable form rather than the maps themselves.
  *
- * A `SnapshotStore` may write to disk, and `Map` does not survive JSON. The
- * canonical form is what the rebuild property already compares, so it is a
- * shape that is known to round-trip rather than a second serialisation.
+ * A `SnapshotStore` may write to disk, and `Map` does not survive JSON.
+ * `snapshot-state.ts` is that form, and it is deliberately not the canonical
+ * comparison key — that one only has to be stable, this one has to be read back.
  */
 function snapshotOf(state: KnowledgeState, position: LogPosition): Snapshot {
   return {
     projectionName: KNOWLEDGE_PROJECTION,
     position,
-    state: serialiseKnowledge(state),
+    state: toSnapshotState(state),
     takenAt: new Date().toISOString(),
   };
+}
+
+/** A snapshot's state and the position it reflects, ready to fold forward from. */
+interface ResumePoint {
+  readonly state: KnowledgeState;
+  readonly position: LogPosition;
 }

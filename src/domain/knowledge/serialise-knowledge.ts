@@ -19,8 +19,11 @@ import type { FieldProvenance, KnowledgeState } from "./projected-state.js";
  * catch. Chunked catch-up produces the same knowledge by a different insertion
  * path, and that is the case only a canonical form distinguishes.
  *
- * The output is a comparison key rather than a storage format. Nothing parses
- * it back, so it is free to be whatever compares most cleanly.
+ * **The output is a comparison key, not a storage format.** Nothing parses it
+ * back, so it is free to be whatever compares most cleanly. What a snapshot
+ * stores is `snapshot-state.ts`, which is a different shape for a different
+ * job — one that has to survive a round-trip, where this one only has to be
+ * stable.
  */
 export function serialiseKnowledge(state: KnowledgeState): string {
   return JSON.stringify({

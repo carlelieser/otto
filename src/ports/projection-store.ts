@@ -36,6 +36,19 @@ export interface ProjectionStore {
    */
   reset(): Promise<void>;
 
+  /**
+   * Rebuilds the projections that are derived from `captures` rather than from
+   * the log.
+   *
+   * Capture text appears in no event — `CaptureIngested` carries the id and the
+   * hash — so the full-text index over Captures cannot be folded and has to be
+   * rebuilt from the table that is truth. It is on this port rather than left
+   * to a caller because `reset` empties that index: a rebuild that did not put
+   * it back would leave Capture search silently returning nothing, which is the
+   * routine operation of ADR-0005 quietly destroying a read surface.
+   */
+  reindexCaptures(): Promise<void>;
+
   /** How far the projection has folded, and whether a rebuild is in flight. */
   checkpoint(): Promise<Checkpoint>;
 
