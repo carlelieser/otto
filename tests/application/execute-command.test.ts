@@ -7,7 +7,7 @@ import {
   UnknownCommandError,
 } from "../../src/application/pipeline/execute-command.js";
 import { FROM_START, type EventStore } from "../../src/ports/event-store.js";
-import { anIngestCapture } from "../support/builders.js";
+import { anIngestCapture, A_CAPTURE_ID } from "../support/builders.js";
 
 const FIXED_NOW = "2026-08-01T09:00:01.000Z";
 const executorFor = (store: EventStore) => createExecutor(store, () => FIXED_NOW);
@@ -35,7 +35,7 @@ describe("the executor appends and returns", () => {
     const store = createEventStore();
     const stored = await executorFor(store).execute(anIngestCapture());
 
-    expect(stored.aggregate).toEqual({ type: "Capture", id: "cap-1", version: 0 });
+    expect(stored.aggregate).toEqual({ type: "Capture", id: A_CAPTURE_ID, version: 0 });
   });
 
   it("writes only to the log, and the log holds exactly what it returned", async () => {
@@ -62,7 +62,7 @@ describe("optimistic concurrency on the aggregate version", () => {
     await executor.execute(anIngestCapture());
 
     const stale = anIngestCapture({
-      aggregate: { type: "Capture", id: "cap-1", expectedVersion: 0 },
+      aggregate: { type: "Capture", id: A_CAPTURE_ID, expectedVersion: 0 },
     });
 
     await expect(executor.execute(stale)).rejects.toThrow(StaleCommandError);
@@ -73,10 +73,12 @@ describe("optimistic concurrency on the aggregate version", () => {
     const executor = executorFor(store);
     await executor.execute(anIngestCapture());
     const stale = anIngestCapture({
-      aggregate: { type: "Capture", id: "cap-1", expectedVersion: 0 },
+      aggregate: { type: "Capture", id: A_CAPTURE_ID, expectedVersion: 0 },
     });
 
-    await expect(executor.execute(stale)).rejects.toThrow(/cap-1.*expected version 0.*found 1/);
+    await expect(executor.execute(stale)).rejects.toThrow(
+      new RegExp(`${A_CAPTURE_ID}.*expected version 0.*found 1`),
+    );
   });
 
   it("accepts a Command computed against the current version", async () => {
@@ -85,7 +87,7 @@ describe("optimistic concurrency on the aggregate version", () => {
     await executor.execute(anIngestCapture());
 
     const next = anIngestCapture({
-      aggregate: { type: "Capture", id: "cap-1", expectedVersion: 1 },
+      aggregate: { type: "Capture", id: A_CAPTURE_ID, expectedVersion: 1 },
       provenance: { ...anIngestCapture().provenance, proposalId: "prop-2" },
     });
 
@@ -97,7 +99,7 @@ describe("optimistic concurrency on the aggregate version", () => {
     const executor = executorFor(store);
     await executor.execute(anIngestCapture());
     const stale = anIngestCapture({
-      aggregate: { type: "Capture", id: "cap-1", expectedVersion: 0 },
+      aggregate: { type: "Capture", id: A_CAPTURE_ID, expectedVersion: 0 },
     });
 
     await executor.execute(stale).catch(() => undefined);

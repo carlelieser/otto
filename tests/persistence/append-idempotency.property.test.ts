@@ -1,10 +1,11 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { openDatabase } from "../../src/infrastructure/persistence/database.js";
 import { SqliteEventStore } from "../../src/infrastructure/persistence/sqlite-event-store.js";
 import { FROM_START, type EventStore } from "../../src/ports/event-store.js";
 import { aCaptureIngested } from "../support/builders.js";
 
-const createStore = (): EventStore => new SqliteEventStore();
+const createStore = (): EventStore => new SqliteEventStore(openDatabase());
 
 /**
  * qa.md §3 puts property-based tests at the level "most likely to be skipped

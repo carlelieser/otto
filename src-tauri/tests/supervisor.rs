@@ -8,7 +8,7 @@
 use otto_lib::audio::write_wav;
 use otto_lib::audio_dir;
 use otto_lib::supervisor::{SidecarConfig, Supervisor};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -119,27 +119,71 @@ fn a_sidecar_that_comes_back_healthy_clears_the_backoff() {
     assert!(!supervisor.in_crash_loop());
 }
 
+/// A supervisor whose sidecar has a database to write to, so the capture
+/// methods are answerable. `:memory:` keeps the test off the disk; the sidecar
+/// is the only process that opens it either way (`runtime.md` §1).
+fn capturing_supervisor(recordings: &Path) -> Supervisor {
+    let interpreter = std::env::var("OTTO_NODE").unwrap_or_else(|_| "node".into());
+    Supervisor::new(
+        SidecarConfig::new(interpreter.into(), sidecar_script(), recordings.to_path_buf())
+            .with_environment("OTTO_DATABASE", ":memory:"),
+    )
+}
+
 #[test]
-fn audio_recorded_by_the_host_is_read_by_the_sidecar_and_then_deleted() {
+fn typed_capture_reaches_the_sidecar_and_comes_back_durable() {
     let base = tempfile::tempdir().expect("tempdir");
     let recordings = audio_dir::ensure_dir(base.path()).expect("ensure");
-    let mut supervisor = supervisor(&recordings);
+    let mut supervisor = capturing_supervisor(&recordings);
     supervisor.start().expect("start");
+
+    let answer = supervisor
+        .call(
+            "ingestTyped",
+            json!({
+                "text": "Coffee with Sarah about the Helios rollout.",
+                "sourceTimestamp": "2026-08-01T09:00:00.000Z",
+            }),
+        )
+        .expect("ingestTyped");
+
+    // The id is derived, not invented: this is the same golden value the
+    // TypeScript derivation tests pin, reached through the real transport.
+    assert_eq!(answer["captureId"], json!("cap-0ee28d5f3077a14b63959caaf2f7415a"));
+    assert_eq!(answer["source"], json!("typed"));
+    assert_eq!(answer["transcriptionModel"], Value::Null);
+}
+
+#[test]
+fn the_sidecar_refuses_a_capture_with_no_recording_start() {
+    let base = tempfile::tempdir().expect("tempdir");
+    let recordings = audio_dir::ensure_dir(base.path()).expect("ensure");
+    let mut supervisor = capturing_supervisor(&recordings);
+    supervisor.start().expect("start");
+
+    // ADR-0018: required rather than defaulted, because a sidecar falling back
+    // to its own clock produces a timing-dependent duplicate-Capture bug.
+    let refusal = supervisor.call("ingestTyped", json!({ "text": "Coffee with Sarah." }));
+
+    assert!(refusal.is_err(), "the sidecar accepted a Capture with no recording-start time");
+}
+
+#[test]
+fn the_host_writes_a_recording_the_sidecar_can_read_at_the_path_it_was_given() {
+    // The path handoff itself, without a transcriber behind it. `ingestVoice`
+    // needs a real `whisper.cpp`, which these tests do not require — what is
+    // asserted here is that the host's WAV lands where the sidecar is told to
+    // look, which is the half of the handoff the host owns.
+    let base = tempfile::tempdir().expect("tempdir");
+    let recordings = audio_dir::ensure_dir(base.path()).expect("ensure");
 
     let recording = recordings.join("handoff.wav");
     let samples: Vec<i16> = (0..1600).map(|n| (n % 512) as i16).collect();
     write_wav(&recording, &samples).expect("write wav");
-    let on_disk = std::fs::metadata(&recording).expect("metadata").len();
 
-    let answer = supervisor
-        .call("readAudio", json!({ "path": recording.to_string_lossy() }))
-        .expect("readAudio");
-
-    // The sidecar read the file at the path it was given, and the ownership
-    // rule holds: the host writes, the sidecar deletes (`runtime.md` §2).
-    assert_eq!(answer["bytes"], json!(on_disk));
-    assert_eq!(answer["deleted"], json!(true));
-    assert!(!recording.exists());
+    assert!(recording.exists());
+    assert!(std::fs::metadata(&recording).expect("metadata").len() > 0);
+    assert!(recording.starts_with(&recordings), "recordings stay in Otto's own directory");
 }
 
 #[test]

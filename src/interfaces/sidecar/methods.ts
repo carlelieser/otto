@@ -1,16 +1,30 @@
-import { stat, unlink } from "node:fs/promises";
+import type { CaptureIngestion } from "../../application/pipeline/ingest-capture.js";
+import type { Transcriber } from "../../ports/transcriber.js";
+import { captureMethods } from "./capture-methods.js";
 import type { Methods } from "./dispatch.js";
 
 /**
- * Everything the sidecar answers in Slice 1.
+ * Everything the sidecar answers.
  *
- * There is no pipeline yet — the sidecar exists here to prove the transport and
- * the supervisor, not to work. `ping` proves the round trip; `readAudio` proves
- * the path handoff and the ownership rule that makes a two-process temporary
- * file safe at all.
+ * `ping` proves the round trip and `exit` makes the supervisor's restart paths
+ * testable without signals. The two capture methods are the work: Slice 1's
+ * `readAudio` placeholder is gone, replaced by `ingestVoice`, which transcribes
+ * and persists before deleting (ADR-0018).
+ *
+ * The capture methods are omitted when there is nothing to ingest with, so the
+ * transport and the supervisor stay testable without a database or a
+ * transcriber behind them.
  */
-export function sidecarMethods(): Methods {
-  return { ping, readAudio, exit: exitNow };
+export function sidecarMethods(capture?: CaptureDependencies): Methods {
+  const base = { ping, exit: exitNow };
+  if (capture === undefined) return base;
+  return { ...base, ...captureMethods(capture.ingestion, capture.transcriber) };
+}
+
+/** What the capture methods need. Absent in the transport's own tests. */
+export interface CaptureDependencies {
+  readonly ingestion: CaptureIngestion;
+  readonly transcriber: Transcriber;
 }
 
 /**
@@ -19,38 +33,6 @@ export function sidecarMethods(): Methods {
  */
 function ping(params: unknown): { pong: unknown } {
   return { pong: params ?? null };
-}
-
-export interface AudioReadResult {
-  readonly bytes: number;
-  readonly deleted: boolean;
-}
-
-/**
- * Reads the temporary WAV the host recorded, reports its size, and deletes it.
- *
- * `runtime.md` §2 puts deletion on the sidecar after a successful
- * transcription; there is no transcriber until Slice 2, so this deletes after a
- * successful *read*. Slice 2 replaces this method with `ingestVoice`, which
- * transcribes and persists before deleting — one call rather than two, so the
- * durability boundary does not fall between round trips. Audio bytes never
- * cross the transport — a path is small and a WAV is not.
- *
- * Deleting only after the size is known is what makes the supervisor's sweep
- * meaningful: a file still on disk at restart is one whose reader died, which
- * is the only way an orphan is produced.
- */
-async function readAudio(params: unknown): Promise<AudioReadResult> {
-  const path = audioPathFrom(params);
-  const { size } = await stat(path);
-  await unlink(path);
-  return { bytes: size, deleted: true };
-}
-
-function audioPathFrom(params: unknown): string {
-  const path = (params as { path?: unknown } | null)?.path;
-  if (typeof path !== "string" || path === "") throw new Error("readAudio requires a path");
-  return path;
 }
 
 /**

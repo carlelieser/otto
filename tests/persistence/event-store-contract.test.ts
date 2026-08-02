@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { openDatabase } from "../../src/infrastructure/persistence/database.js";
 import { SqliteEventStore } from "../../src/infrastructure/persistence/sqlite-event-store.js";
 import { FROM_START, type EventStore } from "../../src/ports/event-store.js";
 import { aCaptureIngested } from "../support/builders.js";
 
-const createStore = (): EventStore => new SqliteEventStore();
+const createStore = (): EventStore => new SqliteEventStore(openDatabase());
 
 /**
  * What an EventStore does, asserted against the adapter that ships: SQLite in

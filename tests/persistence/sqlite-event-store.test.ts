@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { openDatabase } from "../../src/infrastructure/persistence/database.js";
 import { SqliteEventStore } from "../../src/infrastructure/persistence/sqlite-event-store.js";
 import { CREATE_SCHEMA } from "../../src/infrastructure/persistence/schema.js";
 import { FROM_START } from "../../src/ports/event-store.js";
@@ -28,8 +29,10 @@ describe("SQLite refuses mutation at the database level", () => {
        confidence, is_human_confirmed, recorded_at
      ) VALUES ('evt-1', 'CaptureIngested', 1, 'Capture', 'cap-1', 0,
        '{}', 'prop-1', 'cap-1', 'local', 'qwen2.5-7b', 0.9, 0, '2026-08-01T09:00:00Z')`,
-    `INSERT INTO captures (capture_id, source, text, source_timestamp, content_hash, ingested_at)
-     VALUES ('cap-1', 'typed', 'hello', '2026-08-01T09:00:00Z', 'sha256:x', '2026-08-01T09:00:00Z')`,
+    `INSERT INTO captures (capture_id, source, raw_text, source_timestamp, content_hash, ingested_at)
+     VALUES ('cap-1', 'typed', 'hello', '2026-08-01T09:00:00Z',
+       '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+       '2026-08-01T09:00:00Z')`,
   ];
 
   function seededDatabase(): Database.Database {
@@ -43,7 +46,7 @@ describe("SQLite refuses mutation at the database level", () => {
   // than failing at parse time.
   it.each([
     ["events", "type"],
-    ["captures", "text"],
+    ["captures", "raw_text"],
   ])("rejects UPDATE on %s", (table, column) => {
     const seeded = seededDatabase();
     expect(() => seeded.prepare(`UPDATE ${table} SET ${column} = 'x'`).run()).toThrow(
@@ -91,20 +94,22 @@ describe("the SQLite adapter's storage configuration", () => {
   it("runs in WAL mode", () => {
     // stack.md §3: concurrent readers with a single writer is the case WAL is
     // built for, and it is what the sidecar/host split needs.
-    const store = new SqliteEventStore(databaseFile);
+    const database = openDatabase(databaseFile);
+    const store = new SqliteEventStore(database);
     const reader = new Database(databaseFile, { readonly: true });
 
     const mode = (reader.pragma("journal_mode") as { journal_mode: string }[])[0]!.journal_mode;
 
     expect(mode).toBe("wal");
     reader.close();
-    store.close();
+    database.close();
   });
 
   it("lets a second connection read while the store holds the file open", async () => {
     // The sidecar writes and the host reads on behalf of the WebView
     // (stack.md §3). WAL is what makes that concurrent pair work.
-    const store = new SqliteEventStore(databaseFile);
+    const database = openDatabase(databaseFile);
+    const store = new SqliteEventStore(database);
     await store.append([aCaptureIngested()]);
 
     const reader = new Database(databaseFile, { readonly: true });
@@ -114,17 +119,19 @@ describe("the SQLite adapter's storage configuration", () => {
 
     expect(count).toBe(1);
     reader.close();
-    store.close();
+    database.close();
   });
 
   it("persists a log across connections to the same file", async () => {
-    const first = new SqliteEventStore(databaseFile);
+    const firstConnection = openDatabase(databaseFile);
+    const first = new SqliteEventStore(firstConnection);
     await first.append([aCaptureIngested()]);
-    first.close();
+    firstConnection.close();
 
-    const reopened = new SqliteEventStore(databaseFile);
+    const secondConnection = openDatabase(databaseFile);
+    const reopened = new SqliteEventStore(secondConnection);
     expect(await reopened.readForward(FROM_START)).toHaveLength(1);
-    reopened.close();
+    secondConnection.close();
   });
 
   it("can load a binary extension, which the vector extension needs in Slice 3", () => {

@@ -13,5 +13,6 @@ pub mod backoff;
 pub mod capture_window;
 pub mod rpc;
 pub mod supervisor;
+pub mod timestamp;
 
 pub use app::run;

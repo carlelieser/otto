@@ -26,21 +26,31 @@ SELECT MAX(aggregate_version) + 1 AS version FROM events WHERE aggregate_id = ?`
 const NO_LIMIT = -1;
 
 /**
- * The durable half of the adapter pair, in WAL mode — the case of concurrent
- * readers with a single writer, which is exactly Otto's shape (`stack.md` §3).
+ * The log's adapter, in WAL mode — the case of concurrent readers with a single
+ * writer, which is exactly Otto's shape (`stack.md` §3).
  *
- * The driver is `better-sqlite3`, chosen because it can load a binary
- * extension: the vector extension is a `.dylib`/`.so`/`.dll` rather than an npm
- * package (`runtime.md` §4.3), and it lands in Slice 3.
+ * It takes a connection rather than opening one, because `SqliteCaptureStore`
+ * shares it: the startup sweep anti-joins `captures` to `events`, which one
+ * connection can do and two handles on the same file cannot. `openDatabase`
+ * owns the pragmas and the schema.
  */
 export class SqliteEventStore implements EventStore {
   readonly #database: Database.Database;
 
-  constructor(filename = ":memory:") {
-    this.#database = new Database(filename);
-    this.#database.pragma("journal_mode = WAL");
-    this.#database.pragma("foreign_keys = ON");
-    this.#database.exec(CREATE_SCHEMA);
+  constructor(database: Database.Database) {
+    this.#database = database;
+  }
+
+  /**
+   * The connection, for the sibling store that shares it.
+   *
+   * `CaptureStore`'s sweep anti-joins `captures` to `events`, which one
+   * connection can do and two cannot — a cross-database join is not available
+   * to two separate handles on the same file, and would be a second writer
+   * besides (`runtime.md` §1 keeps exactly one).
+   */
+  get database(): Database.Database {
+    return this.#database;
   }
 
   async append(events: readonly DomainEvent[]): Promise<readonly StoredEvent[]> {
@@ -70,9 +80,5 @@ export class SqliteEventStore implements EventStore {
       version: number | null;
     };
     return row.version ?? 0;
-  }
-
-  close(): void {
-    this.#database.close();
   }
 }

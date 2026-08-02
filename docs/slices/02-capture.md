@@ -126,7 +126,13 @@ Nothing else — no punctuation repair, no capitalisation, no filler-word remova
 
 It is a pure function in `capture/`, and it does not feed `content_hash`, which covers raw text. That combination is what makes the list safe to extend later: adding a rule changes what downstream reads without re-keying a single existing Capture.
 
-**The Capture is its own aggregate, and `capture_id` is the aggregate id.** `CaptureIngested` is always version 0 of a new aggregate, so `expectedVersion` is 0 for every ingestion and `#rejectIfStale` can only fire if the same Capture is ingested twice concurrently — which the single-threaded pipeline (`add.md` §4) already prevents. That is worth noting rather than discovering: the staleness machinery is inert in this slice by construction, not by luck, and Slice 9's `CaptureTranscriptCorrected` is what gives the Capture aggregate a version 1 and makes the check live.
+**The Capture is its own aggregate, and `capture_id` is the aggregate id.** `CaptureIngested` is always version 0 of a new aggregate, so `expectedVersion` is 0 for every ingestion. Slice 9's `CaptureTranscriptCorrected` is what gives the Capture aggregate a version 1.
+
+**The staleness check is not inert here, and this was wrong when first written.** An earlier draft of this section claimed `#rejectIfStale` could only fire if the same Capture were ingested twice *concurrently*, which the single-threaded pipeline (`add.md` §4) prevents. That is false, and the implementation found it: a *sequential* re-ingestion fires it too. The second delivery arrives with `expectedVersion: 0` against an aggregate already at version 1, and `StaleCommandError` is thrown before `EventStore.append` gets the chance to no-op it.
+
+That matters because the retried voice upload in Verification is exactly this case, and §4.3 requires it to be a no-op rather than a throw. The store's idempotency does not save it: the executor's check sits in front of the append. So ingestion asks whether the Capture's ingestion event already exists before building the Command, and returns if it does.
+
+The executor is left alone. Its staleness check is correct — Slice 4 turns a `StaleCommandError` into re-proposal from the differ — and weakening it to make ingestion convenient would trade a real guarantee for one caller's shape. The idempotency belongs at the call site that knows re-ingestion is legitimate.
 
 **Ordering: the Capture row is written before the event.** Two separate ports with no shared transaction (`add.md` §9), so one of the two orders has to be chosen and the crash between them accounted for.
 

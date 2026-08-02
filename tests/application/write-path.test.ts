@@ -3,7 +3,7 @@ import { createExecutor, createEventStore } from "../../src/composition-root.js"
 import { CAPTURE_INGESTED } from "../../src/domain/events/capture-ingested.js";
 import { createUpcastRegistry } from "../../src/domain/events/event-versions.js";
 import { FROM_START } from "../../src/ports/event-store.js";
-import { anIngestCapture } from "../support/builders.js";
+import { anIngestCapture, A_CAPTURE_ID } from "../support/builders.js";
 
 /**
  * The whole write path end to end: a Command in, an event on the log, read
@@ -44,8 +44,44 @@ describe("the write path, end to end", () => {
     await executor.execute(anIngestCapture());
     const [stored] = await store.readForward(FROM_START);
 
-    expect(stored?.provenance.captureId).toBe("cap-1");
-    expect(stored?.provenance.provider).toBe("local");
-    expect(stored?.provenance.modelVersion).toBe("qwen2.5-7b-instruct");
+    expect(stored?.provenance.captureId).toBe(A_CAPTURE_ID);
+  });
+
+  /**
+   * Ingestion has no model to name, so both provenance fields are `"human"`.
+   *
+   * Naming the transcriber here is the tempting answer and the wrong one:
+   * `provider` and `modelVersion` are the key `triage.md` §2 uses for
+   * thresholds and §4 uses to count Corrections toward bootstrap exit, and a
+   * transcriber never proposes anything and has no Confidence to calibrate. A
+   * `whisper.cpp` cohort would be a bootstrap bucket that can never fill.
+   */
+  it("records ingestion as human-confirmed, because no inference happened", async () => {
+    const store = createEventStore();
+    const executor = createExecutor(store);
+
+    await executor.execute(anIngestCapture());
+    const [stored] = await store.readForward(FROM_START);
+
+    expect(stored?.provenance.provider).toBe("human");
+    expect(stored?.provenance.modelVersion).toBe("human");
+    expect(stored?.provenance.confidence).toBeNull();
+    expect(stored?.provenance.proposalId).toBeNull();
+  });
+
+  /**
+   * `isHumanConfirmed` does not assert the transcript is accurate; it asserts
+   * that nothing unattended decided anything. A misheard name is a wrong
+   * Capture, not an unconfirmed one — which is why correction is its own event
+   * in Slice 9 rather than a Confidence here.
+   */
+  it("marks the Capture human-confirmed, since no inference stands between user and Capture", async () => {
+    const store = createEventStore();
+    const executor = createExecutor(store);
+
+    await executor.execute(anIngestCapture());
+    const [stored] = await store.readForward(FROM_START);
+
+    expect(stored?.provenance.isHumanConfirmed).toBe(true);
   });
 });
