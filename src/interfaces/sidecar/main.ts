@@ -1,10 +1,13 @@
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import {
+  createAdjudication,
+  createBootstrapStatus,
   createExtraction,
   createExtractor,
   createIngestion,
   createRecovery,
+  createReviewQueue,
   createStorage,
   createTranscriber,
 } from "../../composition-root.js";
@@ -61,6 +64,9 @@ async function startCaptureSidecar(): Promise<void> {
       transcriber: createTranscriber(),
       extraction: createExtraction(storage, createExtractor()),
       captures: storage.captures,
+      review: createReviewQueue(storage),
+      adjudication: createAdjudication(storage),
+      bootstrap: createBootstrapStatus(storage),
     }),
   );
 }

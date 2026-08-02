@@ -120,3 +120,43 @@ export function deriveProposalId(identity: ProposalIdentity): string {
   const parts = [captureId, stage, provider, modelVersion, String(ordinal)];
   return `prop-${sha256Hex(parts).slice(0, ID_LENGTH)}`;
 }
+
+/**
+ * What a Correction's id is derived from: the Proposal it corrects, and the
+ * answer the user gave.
+ *
+ * Deliberately **not** the Capture, the model, or the clock. A Correction is
+ * the user's answer to one Proposal, and the model that produced the Proposal
+ * is already fixed by the `proposalId` term — hashing it again would only make
+ * the input longer.
+ */
+export interface CorrectionIdentity {
+  readonly proposalId: string;
+  /** The chosen Command's type, e.g. `SetField`. */
+  readonly chosenType: string;
+  /** The id of the aggregate the chosen Command targets. */
+  readonly chosenTargetId: string;
+  /** The chosen Command's payload, serialised canonically by the caller. */
+  readonly chosenPayload: string;
+}
+
+/**
+ * A Correction's id, derived from the Proposal and **the answer the user gave**.
+ *
+ * The answer is in the hash, and that is the decision. Deriving from the
+ * `proposalId` alone would make the id an "this was corrected" key, so a user
+ * who corrected a field to `Acme`, thought again, and corrected it to `Globex`
+ * would have the second answer collapse into the first as a no-op — losing the
+ * one they actually meant. Including the chosen Command makes a *repeat* of the
+ * same correction idempotent, which is the double-click case that actually
+ * needs collapsing, while a genuinely different answer is a different row.
+ *
+ * Same digest, separator, truncation, and prefix convention as the two
+ * derivations above. The `corr-` prefix continues the pattern rather than
+ * starting a second one.
+ */
+export function deriveCorrectionId(identity: CorrectionIdentity): string {
+  const { proposalId, chosenType, chosenTargetId, chosenPayload } = identity;
+  const parts = [proposalId, chosenType, chosenTargetId, chosenPayload];
+  return `corr-${sha256Hex(parts).slice(0, ID_LENGTH)}`;
+}

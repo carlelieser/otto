@@ -5,6 +5,10 @@ import { type CommandTranslator, Executor } from "./application/pipeline/execute
 import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
+import { ProposalAdjudication } from "./application/pipeline/adjudicate-proposal.js";
+import { CaptureTriage, type CorrectionCounts } from "./application/pipeline/triage-capture.js";
+import { ReviewQueue } from "./application/surface/read-review-queue.js";
+import { BootstrapStatus } from "./application/surface/read-bootstrap-status.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";
 import { SqliteEntityViewStore } from "./infrastructure/persistence/sqlite-entity-view-store.js";
 import { SqliteProjectionStore } from "./infrastructure/persistence/sqlite-projection-store.js";
@@ -14,6 +18,8 @@ import { SqliteEventStore } from "./infrastructure/persistence/sqlite-event-stor
 import { SqliteEntityRepository } from "./infrastructure/persistence/sqlite-entity-repository.js";
 import { SqliteProposalStore } from "./infrastructure/persistence/sqlite-proposal-store.js";
 import { SqliteDispositionStore } from "./infrastructure/persistence/sqlite-disposition-store.js";
+import { SqliteReviewQueueStore } from "./infrastructure/persistence/sqlite-review-queue-store.js";
+import { SqliteCorrectionStore } from "./infrastructure/persistence/sqlite-correction-store.js";
 import { LocalEmbedder } from "./infrastructure/embedding/local-embedder.js";
 import { LocalAdjudicator } from "./infrastructure/llm/local-adjudicator.js";
 import { WhisperCliTranscriber } from "./infrastructure/transcription/whisper-cli-transcriber.js";
@@ -104,6 +110,23 @@ export interface Storage {
    * lets it read while the pipeline writes (`runtime.md` §1).
    */
   readonly projections: SqliteProjectionStore;
+  /**
+   * The triaged Proposals the review queue shows (Slice 7).
+   *
+   * A `projection_` table on the same connection as the rest: rebuildable by
+   * re-running the differ and triage over stored Captures, which is ADR-0019's
+   * argument one stage later.
+   */
+  readonly queue: SqliteReviewQueueStore;
+  /**
+   * What the user chose instead, and the bootstrap counter behind it
+   * (ADR-0006, `triage.md` §4).
+   *
+   * The calibration corpus. Nothing in MVP consumes it beyond the counter —
+   * the eval set and the threshold tuner are post-MVP (PRD §7.2) — and it is
+   * gathered now because it is unreconstructable later.
+   */
+  readonly corrections: SqliteCorrectionStore;
   /** The read path: entity views, provenance, and full-text search. */
   readonly views: SqliteEntityViewStore;
   /** Closes the shared connection. No store owns it, so none of them closes it. */
@@ -131,6 +154,8 @@ function projectionStores(database: Database.Database) {
     entities: new SqliteEntityRepository(database),
     projections: new SqliteProjectionStore(database),
     views: new SqliteEntityViewStore(database),
+    queue: new SqliteReviewQueueStore(database),
+    corrections: new SqliteCorrectionStore(database),
   };
 }
 
@@ -261,6 +286,67 @@ export function createIngestion(
 /** The startup sweep, which re-emits events for rows that crashed without one. */
 export function createRecovery(storage: Storage, ingestion: CaptureIngestion): CaptureRecovery {
   return new CaptureRecovery(storage.captures, ingestion);
+}
+
+/** The review queue as a read surface: requests, records, and the discard section. */
+export function createReviewQueue(storage: Storage): ReviewQueue {
+  return new ReviewQueue(storage.queue, storage.dispositions, storage.projections);
+}
+
+/** Bootstrap status, so the dashboard can say why Otto is asking (`triage.md` §4). */
+export function createBootstrapStatus(storage: Storage): BootstrapStatus {
+  return new BootstrapStatus(storage.corrections);
+}
+
+/**
+ * Adjudication, wired to the executor and the two stores it writes.
+ *
+ * No extractor is passed, and none could be: the correction path issues a
+ * Command directly to the executor and does not re-enter the pipeline
+ * (`add.md` §7).
+ */
+export function createAdjudication(
+  storage: Storage,
+  now: () => string = defaultClock,
+): ProposalAdjudication {
+  return new ProposalAdjudication({
+    executor: createExecutor(storage.events, now),
+    queue: storage.queue,
+    corrections: storage.corrections,
+    currentVersionOf: (aggregateId) => storage.events.currentVersion(aggregateId),
+    now,
+  });
+}
+
+/**
+ * The bootstrap counter, reading the corrections that now exist.
+ *
+ * This is what `NO_CORRECTIONS` was standing in for. Until this slice the
+ * honest answer was zero and Otto was in permanent bootstrap (ADR-0022); with
+ * corrections accumulating, the fifty-Correction threshold becomes reachable
+ * and the count is per provider and model version (ADR-0008).
+ *
+ * It reaches the running system through `createTriage` below, which is the
+ * assembly a pipeline driver takes. **No such driver exists yet**: triage has
+ * been wired and undriven since Slice 5, because nothing between capture and
+ * here orchestrates the stages end to end. That orchestration is not this
+ * slice's, and saying so beats a comment that implies the counter is live.
+ */
+export function createCorrectionCounts(storage: Storage): CorrectionCounts {
+  return {
+    forModel: (provider, modelVersion) => storage.corrections.countForModel(provider, modelVersion),
+  };
+}
+
+/** Triage, wired to storage, the executor, and the real correction counter. */
+export function createTriage(storage: Storage, now: () => string = defaultClock): CaptureTriage {
+  return new CaptureTriage({
+    executor: createExecutor(storage.events, now),
+    dispositions: storage.dispositions,
+    queue: storage.queue,
+    corrections: createCorrectionCounts(storage),
+    now,
+  });
 }
 
 /**

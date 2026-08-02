@@ -3,6 +3,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   deriveCaptureId,
+  deriveCorrectionId,
   deriveContentHash,
   deriveProposalId,
 } from "../../src/capture/capture-identity.js";
@@ -200,5 +201,62 @@ describe("deriveProposalId", () => {
       captureId: GOLDEN_PROPOSAL.captureId.replace("cap-", ""),
     };
     expect(deriveProposalId(stripped)).not.toBe(deriveProposalId(GOLDEN_PROPOSAL));
+  });
+});
+
+const GOLDEN_CORRECTION = {
+  proposalId: GOLDEN_PROPOSAL.proposalId,
+  chosenType: "SetField",
+  chosenTargetId: "per-sarah",
+  chosenPayload: '{"field":"employer","value":"Acme"}',
+  correctionId: "corr-1f567ac058a9d8d860e40b1a104f066f",
+} as const;
+
+describe("deriveCorrectionId", () => {
+  it("is the corr- prefix and 32 hex characters", () => {
+    expect(deriveCorrectionId(GOLDEN_CORRECTION)).toMatch(/^corr-[0-9a-f]{32}$/);
+  });
+
+  it("matches the golden value for a fixed tuple", () => {
+    expect(deriveCorrectionId(GOLDEN_CORRECTION)).toBe(GOLDEN_CORRECTION.correctionId);
+  });
+
+  /**
+   * The idempotency the derivation exists for: a double-submitted correction
+   * from a retried click is one row, not two.
+   */
+  it("is the same for the same correction of the same Proposal", () => {
+    expect(deriveCorrectionId({ ...GOLDEN_CORRECTION })).toBe(
+      deriveCorrectionId(GOLDEN_CORRECTION),
+    );
+  });
+
+  /**
+   * The other half: a user who corrects, then corrects *again* to something
+   * else, has said two different things and both are data. Collapsing them
+   * would silently discard the second answer — and the second is the one they
+   * meant.
+   */
+  it("differs when the user chooses a different answer", () => {
+    const otherValue = {
+      ...GOLDEN_CORRECTION,
+      chosenPayload: '{"field":"employer","value":"Globex"}',
+    };
+    expect(deriveCorrectionId(otherValue)).not.toBe(deriveCorrectionId(GOLDEN_CORRECTION));
+  });
+
+  it("differs when the user chooses a different entity", () => {
+    const otherSarah = { ...GOLDEN_CORRECTION, chosenTargetId: "per-other-sarah" };
+    expect(deriveCorrectionId(otherSarah)).not.toBe(deriveCorrectionId(GOLDEN_CORRECTION));
+  });
+
+  it("differs when the corrected Proposal differs", () => {
+    const otherProposal = { ...GOLDEN_CORRECTION, proposalId: "prop-other" };
+    expect(deriveCorrectionId(otherProposal)).not.toBe(deriveCorrectionId(GOLDEN_CORRECTION));
+  });
+
+  it("differs when the chosen Command type differs", () => {
+    const asCreate = { ...GOLDEN_CORRECTION, chosenType: "CreateEntity" };
+    expect(deriveCorrectionId(asCreate)).not.toBe(deriveCorrectionId(GOLDEN_CORRECTION));
   });
 });

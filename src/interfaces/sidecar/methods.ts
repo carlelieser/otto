@@ -5,6 +5,10 @@ import type { Transcriber } from "../../ports/transcriber.js";
 import { captureMethods } from "./capture-methods.js";
 import type { Methods } from "./dispatch.js";
 import { extractionMethods } from "./extraction-methods.js";
+import { reviewMethods } from "./review-methods.js";
+import type { ProposalAdjudication } from "../../application/pipeline/adjudicate-proposal.js";
+import type { BootstrapStatus } from "../../application/surface/read-bootstrap-status.js";
+import type { ReviewQueue } from "../../application/surface/read-review-queue.js";
 
 /**
  * Everything the sidecar answers.
@@ -25,7 +29,21 @@ export function sidecarMethods(capture?: CaptureDependencies): Methods {
     ...base,
     ...captureMethods(capture.ingestion, capture.transcriber),
     ...extractionMethodsFor(capture),
+    ...reviewMethodsFor(capture),
   };
+}
+
+/**
+ * The review queue's methods, when there is a queue to serve them from.
+ *
+ * Optional for the same reason the others are: the transport's own tests have
+ * nothing to review and should not have to construct a queue to say so. The
+ * real sidecar passes all three.
+ */
+function reviewMethodsFor(capture: CaptureDependencies): Methods {
+  const { review, adjudication, bootstrap } = capture;
+  if (review === undefined || adjudication === undefined || bootstrap === undefined) return {};
+  return reviewMethods(review, adjudication, bootstrap);
 }
 
 /**
@@ -48,6 +66,12 @@ export interface CaptureDependencies {
   readonly extraction?: CaptureExtraction;
   /** Extraction reads a *stored* Capture, so the method needs to fetch one. */
   readonly captures?: CaptureStore;
+  /** The review queue's three lists (Slice 7). */
+  readonly review?: ReviewQueue;
+  /** Confirm and correct, which reach the executor without re-entering the pipeline. */
+  readonly adjudication?: ProposalAdjudication;
+  /** Why Otto is asking so much, so the dashboard can say (`triage.md` §4). */
+  readonly bootstrap?: BootstrapStatus;
 }
 
 /**
