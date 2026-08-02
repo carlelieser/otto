@@ -160,12 +160,6 @@ describe("re-extraction under the id derivation", () => {
   });
 
   /**
-   * The new ids arrive as **ordinary Proposals subject to ordinary triage**
-   * rather than as a special class. Both sets are stored against the Capture:
-   * nothing deletes the old ones, because a Proposal is a claim that was made
-   * and the log of what Otto considered is not rewritten by a better model.
-   */
-  /**
    * `qa.md` §4.3: a re-extracted Proposal matching current state closes
    * silently rather than appearing in the queue. Under the same model the ids
    * collide, so nothing new emerged and there is nothing to queue.
@@ -187,6 +181,12 @@ describe("re-extraction under the id derivation", () => {
     expect(emerged.map((proposal) => proposal.mention.text)).toEqual(["Sarah"]);
   });
 
+  /**
+   * The new ids arrive as **ordinary Proposals subject to ordinary triage**
+   * rather than as a special class. Both sets stay stored against the Capture:
+   * nothing deletes the old ones, because a Proposal is a claim that was made
+   * and the record of what Otto considered is not rewritten by a better model.
+   */
   it("keeps both models' Proposals against the Capture", async () => {
     const capture = aCorrectedCapture();
     await reextractionWith(anExtractor("canned")).reextract(capture);

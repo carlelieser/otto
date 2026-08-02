@@ -62,9 +62,29 @@ export class CaptureReextraction {
    * rather than a comparison of claimed values.
    */
   async emerged(capture: Capture): Promise<readonly ExtractedProposal[]> {
+    return (await this.reextractAndDiff(capture)).emerged;
+  }
+
+  /**
+   * One re-run, and both answers about it.
+   *
+   * The two are wanted together by every caller that acts on a correction, and
+   * asking for them separately would call the model twice for one correction —
+   * which the automatic re-run makes a per-correction cost rather than a
+   * per-request one.
+   */
+  async reextractAndDiff(capture: Capture): Promise<ReextractionOutcome> {
     const before = await this.#proposals.forCapture(capture.captureId);
     const recorded = new Set(before.map((proposal) => proposal.proposalId));
-    const produced = await this.reextract(capture);
-    return produced.filter((proposal) => !recorded.has(proposal.proposalId));
+    const proposals = await this.reextract(capture);
+    return { proposals, emerged: proposals.filter((it) => !recorded.has(it.proposalId)) };
   }
+}
+
+/** What a re-run produced, and which of it is new. */
+export interface ReextractionOutcome {
+  /** Everything the current text extracted, whether or not it is new. */
+  readonly proposals: readonly ExtractedProposal[];
+  /** The subset no earlier run had recorded. Empty when the re-run confirmed. */
+  readonly emerged: readonly ExtractedProposal[];
 }

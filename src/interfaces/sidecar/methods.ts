@@ -1,8 +1,11 @@
+import type { TranscriptCorrection } from "../../application/pipeline/correct-transcript.js";
 import type { CaptureExtraction } from "../../application/pipeline/extract-capture.js";
 import type { CaptureIngestion } from "../../application/pipeline/ingest-capture.js";
+import type { CaptureReextraction } from "../../application/pipeline/reextract-capture.js";
 import type { CaptureStore } from "../../ports/capture-store.js";
 import type { Transcriber } from "../../ports/transcriber.js";
 import { captureMethods } from "./capture-methods.js";
+import { correctionMethods } from "./correction-methods.js";
 import type { Methods } from "./dispatch.js";
 import { extractionMethods } from "./extraction-methods.js";
 import { reviewMethods } from "./review-methods.js";
@@ -30,8 +33,22 @@ export function sidecarMethods(capture?: CaptureDependencies): Methods {
     ...base,
     ...captureMethods(capture.ingestion, capture.transcriber),
     ...extractionMethodsFor(capture),
+    ...correctionMethodsFor(capture),
     ...reviewMethodsFor(capture),
   };
+}
+
+/**
+ * The correction method, when there is a correction stage to serve it with.
+ *
+ * Omitted rather than registered-and-failing when nothing is wired, which is
+ * the shape `qa.md` §7.6 asks about: it wants the affordance *absent*, not
+ * disabled. A caller with no correction wired finds no method to call.
+ */
+function correctionMethodsFor(capture: CaptureDependencies): Methods {
+  const { correction, reextraction } = capture;
+  if (correction === undefined || reextraction === undefined) return {};
+  return correctionMethods(correction, reextraction);
 }
 
 /**
@@ -67,6 +84,15 @@ export interface CaptureDependencies {
   readonly extraction?: CaptureExtraction;
   /** Extraction reads a *stored* Capture, so the method needs to fetch one. */
   readonly captures?: CaptureStore;
+  /**
+   * Correcting a misheard transcript (Slice 9).
+   *
+   * Optional so the transport's own tests stay constructible, and so a build
+   * that offers no correction affordance exposes no method for one.
+   */
+  readonly correction?: TranscriptCorrection;
+  /** The automatic re-run a correction triggers (`runtime.md` §3, §5). */
+  readonly reextraction?: CaptureReextraction;
   /** The review queue's three lists (Slice 7). */
   readonly review?: ReviewQueue;
   /** Confirm and correct, which reach the executor without re-entering the pipeline. */

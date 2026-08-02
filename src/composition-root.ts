@@ -2,8 +2,10 @@ import type Database from "better-sqlite3";
 import { CAPTURE_TRANSLATORS } from "./application/pipeline/capture-translators.js";
 import { KNOWLEDGE_TRANSLATORS } from "./application/pipeline/knowledge-translators.js";
 import { type CommandTranslator, Executor } from "./application/pipeline/execute-command.js";
+import { TranscriptCorrection } from "./application/pipeline/correct-transcript.js";
 import { CaptureExtraction } from "./application/pipeline/extract-capture.js";
 import { CaptureIngestion } from "./application/pipeline/ingest-capture.js";
+import { CaptureReextraction } from "./application/pipeline/reextract-capture.js";
 import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
 import { ProposalAdjudication } from "./application/pipeline/adjudicate-proposal.js";
 import { DuplicateDetection } from "./application/pipeline/detect-duplicates.js";
@@ -282,6 +284,39 @@ export function createIngestion(
 ): CaptureIngestion {
   const { captures, events } = storage;
   return new CaptureIngestion({ captures, events }, createExecutor(events, now), now);
+}
+
+/**
+ * Transcript correction, wired to the Capture store and the executor.
+ *
+ * No extractor is passed, and none could be: the re-run is the caller's, which
+ * is what keeps "this stage mutates nothing" checkable by reading its imports
+ * (`correct-transcript.ts`).
+ */
+export function createCorrection(
+  storage: Storage,
+  now: () => string = defaultClock,
+): TranscriptCorrection {
+  return new TranscriptCorrection({
+    captures: storage.captures,
+    executor: createExecutor(storage.events, now),
+    currentVersionOf: (aggregateId) => storage.events.currentVersion(aggregateId),
+    now,
+  });
+}
+
+/**
+ * The re-run a correction triggers (`runtime.md` §3, §5).
+ *
+ * Takes the extraction stage rather than an extractor, so the model a re-run
+ * uses is the one the pipeline is configured with — a second extractor here
+ * would be a second answer to "which model is Otto running" (ADR-0016).
+ */
+export function createReextraction(
+  extraction: CaptureExtraction,
+  storage: Storage,
+): CaptureReextraction {
+  return new CaptureReextraction(extraction, storage.proposals);
 }
 
 /** The startup sweep, which re-emits events for rows that crashed without one. */
