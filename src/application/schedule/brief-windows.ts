@@ -74,23 +74,27 @@ export async function dueBriefWindows(
 function candidateWindows(kind: BriefKind, now: string): readonly string[] {
   const windows: string[] = [];
   for (let back = 0; back < CATCH_UP_DAYS[kind]; back += 1) {
-    const covers = daysEarlier(now, back);
-    if (hasTriggered(kind, covers, now)) windows.push(triggerInstantOf(covers));
+    const day = daysEarlier(now, back);
+    if (hasTriggered(kind, day, now)) windows.push(triggerInstantOf(day));
   }
   return windows.reverse();
 }
 
 /**
- * Whether the window covering `covers` has opened by `now`.
+ * Whether the window on `day`'s date has opened by `now`.
+ *
+ * `day` carries `now`'s time of day rather than the trigger hour — it is a
+ * point on a date rather than a window — so only its date and weekday are read
+ * here. `triggerInstantOf` is what turns it into the instant a brief covers.
  *
  * A past day's window opened whenever its trigger hour arrived, so only the
  * current day has to be checked against the hour. The weekly kind additionally
  * has to fall on its weekday, which is what makes a Tuesday tick that missed
  * Monday find Monday's window rather than Tuesday's.
  */
-function hasTriggered(kind: BriefKind, covers: string, now: string): boolean {
-  if (kind === "weekly" && localWeekdayOf(covers) !== WEEKLY_DAY) return false;
-  if (localDateOf(covers) !== localDateOf(now)) return true;
+function hasTriggered(kind: BriefKind, day: string, now: string): boolean {
+  if (kind === "weekly" && localWeekdayOf(day) !== WEEKLY_DAY) return false;
+  if (localDateOf(day) !== localDateOf(now)) return true;
   return localHourOf(now) >= TRIGGER_HOUR;
 }
 
@@ -103,8 +107,8 @@ function hasTriggered(kind: BriefKind, covers: string, now: string): boolean {
  * produced at Tuesday lunchtime for Monday scores Monday's log, not Monday's
  * log plus a day and a half of it.
  */
-function triggerInstantOf(covers: string): string {
-  const at = new Date(covers);
+function triggerInstantOf(day: string): string {
+  const at = new Date(day);
   at.setHours(TRIGGER_HOUR, 0, 0, 0);
   return at.toISOString();
 }

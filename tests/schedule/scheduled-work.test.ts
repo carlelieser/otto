@@ -49,19 +49,33 @@ afterEach(() => {
   else process.env.TZ = original;
 });
 
-/** A scheduler over real storage, with an optionally substituted generator. */
+/**
+ * A scheduler over real storage, with an optionally substituted generator.
+ *
+ * Failures are swallowed by default so the tests about *storage* do not print
+ * a provider error. The idle test below builds its own without that, because
+ * whether the default reporter stays silent is the thing it is asserting.
+ */
 function schedulerAt(now: string, generator: BriefGenerator = new InMemoryBriefGenerator()) {
+  return new Scheduler({ tasks: tasksFor(generator), now: () => now, report: () => {} });
+}
+
+/** The same wiring, reporting to stderr as production does. */
+function reportingSchedulerAt(now: string) {
+  return new Scheduler({ tasks: tasksFor(new InMemoryBriefGenerator()), now: () => now });
+}
+
+function tasksFor(generator: BriefGenerator) {
   const production = new BriefProduction({
     events: storage.events,
     briefs: storage.briefs,
     generator,
   });
-  const tasks = scheduledTasks({
+  return scheduledTasks({
     worker: createProjectionWorker(storage),
     production,
     briefs: storage.briefs,
   });
-  return new Scheduler({ tasks, now: () => now, report: () => {} });
 }
 
 describe("a tick with no request dispatched", () => {
@@ -106,6 +120,13 @@ describe("a tick with no request dispatched", () => {
  * is that nothing after the first one writes or generates anything.
  */
 describe("repeated ticks within one window", () => {
+  /**
+   * The counts are absolute rather than compared against the first tick's, so
+   * that a first tick which generated ten times would fail here. Ten ticks on
+   * this Sunday owe three briefs in total — the day itself, the day before it
+   * within the two-day bound, and the week's Monday — and therefore exactly
+   * three generator calls.
+   */
   it("produce one brief per window and one generator call each", async () => {
     let calls = 0;
     const counting: BriefGenerator = {
@@ -116,13 +137,11 @@ describe("repeated ticks within one window", () => {
     };
     const scheduler = schedulerAt(SUNDAY_MORNING, counting);
 
-    await scheduler.tick();
-    const afterFirst = (await reads.recent("daily")).length;
-    const callsAfterFirst = calls;
-    for (let tick = 0; tick < 9; tick += 1) await scheduler.tick();
+    for (let tick = 0; tick < 10; tick += 1) await scheduler.tick();
 
-    expect(await reads.recent("daily")).toHaveLength(afterFirst);
-    expect(calls).toBe(callsAfterFirst);
+    expect(await reads.recent("daily")).toHaveLength(2);
+    expect(await reads.recent("weekly")).toHaveLength(1);
+    expect(calls).toBe(3);
   });
 
   it("write one brief for the current day however many times they run", async () => {
@@ -134,6 +153,49 @@ describe("repeated ticks within one window", () => {
       (brief) => brief.briefId === "daily-2026-08-02",
     );
     expect(today).toHaveLength(1);
+  });
+});
+
+/**
+ * "No output when idle. A tick with no due work logs nothing."
+ *
+ * Asserted over real storage rather than against the scheduler's own `report`,
+ * which is only ever called on failure and so cannot distinguish a quiet tick
+ * from a busy one. The quiet tick here is a second tick after a first has
+ * written every due brief: nothing is due, nothing is folded, and nothing is
+ * written to either stream.
+ */
+describe("a tick with nothing due", () => {
+  it("writes nothing to stderr or stdout", async () => {
+    const scheduler = reportingSchedulerAt(SUNDAY_MORNING);
+    await scheduler.tick();
+    const written: string[] = [];
+    const streams = [process.stderr, process.stdout] as const;
+    const originals = streams.map((stream) => stream.write);
+    for (const stream of streams) {
+      stream.write = ((chunk: string) => {
+        written.push(String(chunk));
+        return true;
+      }) as typeof stream.write;
+    }
+
+    try {
+      await scheduler.tick();
+    } finally {
+      streams.forEach((stream, index) => (stream.write = originals[index]!));
+    }
+
+    expect(written).toEqual([]);
+  });
+
+  it("produces no further briefs", async () => {
+    const scheduler = schedulerAt(SUNDAY_MORNING);
+    await scheduler.tick();
+    const after = (await reads.recent("daily")).length;
+
+    await scheduler.tick();
+
+    expect(await reads.recent("daily")).toHaveLength(after);
   });
 });
 

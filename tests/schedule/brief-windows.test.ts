@@ -159,6 +159,21 @@ describe("the weekly window", () => {
 
     expect(windows).toEqual([]);
   });
+
+  /**
+   * The seven-day bound holds exactly one Monday whatever day it is read on,
+   * which is what keeps a tick to one weekly brief. An eight-day bound would
+   * hold two every Monday — the day the current week's brief is due, and so the
+   * day a duplicate would be most visible.
+   */
+  it("finds exactly one Monday on every day of the week", async () => {
+    setTimezone("UTC");
+
+    for (let day = 2; day <= 8; day += 1) {
+      const at = `2026-08-0${day}T09:00:00.000Z`;
+      expect(await dueBriefWindows("weekly", at, NONE_STORED)).toHaveLength(1);
+    }
+  });
 });
 
 /** The local date each window covers, which is what its brief id names. */
