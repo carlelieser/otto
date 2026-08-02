@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ProjectionWorker } from "../../src/application/projection/projection-worker.js";
 import { UpcastRegistry } from "../../src/domain/events/upcast-registry.js";
-import { resolveRedirect } from "../../src/domain/knowledge/project-entity.js";
+import { relationsIn, resolveRedirect } from "../../src/domain/knowledge/project-entity.js";
 import { openDatabase } from "../../src/infrastructure/persistence/database.js";
 import { SqliteEventStore } from "../../src/infrastructure/persistence/sqlite-event-store.js";
 import { SqliteEntityViewStore } from "../../src/infrastructure/persistence/sqlite-entity-view-store.js";
 import { SqliteProjectionStore } from "../../src/infrastructure/persistence/sqlite-projection-store.js";
 import type { EventStore } from "../../src/ports/event-store.js";
-import { aFieldSet, anEntitiesMerged, anEntityCreated } from "../support/projection-builders.js";
+import {
+  aFieldSet,
+  anEntitiesMerged,
+  anEntitiesRelated,
+  anEntityCreated,
+} from "../support/projection-builders.js";
 
 /**
  * **A merge through the real projection tables** (`qa.md` §7.4).
@@ -39,6 +44,15 @@ async function mergeTwoSarahs(): Promise<void> {
     anEntityCreated({ aggregateId: "per-4172" }),
     anEntityCreated({ aggregateId: "per-4891", payload: { name: "Sara Chen" } }),
     anEntitiesMerged({ mergedId: "per-4891" }, { aggregateId: "per-4172" }),
+  ]);
+  await worker.catchUp();
+}
+
+/** Helios involving one of the two Sarahs, folded into the projection. */
+async function givenHeliosInvolving(toId: string): Promise<void> {
+  await events.append([
+    anEntityCreated({ aggregateId: "proj-1", payload: { entityType: "Project", name: "Helios" } }),
+    anEntitiesRelated({ aggregateId: "proj-1", toId }),
   ]);
   await worker.catchUp();
 }
@@ -87,6 +101,36 @@ describe("a merge in the projection tables", () => {
     const state = await projections.read();
 
     expect(resolveRedirect(state, "per-4891")).toBe("per-4172");
+  });
+
+  /**
+   * An edge that named the merged-away identity must not survive in the table
+   * alongside its repointed self. The fold rebuilds the relation map, but the
+   * store only ever inserted rows — so a stale row would leave the survivor's
+   * page showing an edge to an entity that appears in no list view.
+   */
+  it("leaves no edge in the table still naming the merged-away id", async () => {
+    await givenHeliosInvolving("per-4891");
+    await mergeTwoSarahs();
+
+    const state = await projections.read();
+
+    expect(relationsIn(state).map((relation) => relation.to.id)).toEqual(["per-4172"]);
+  });
+
+  /**
+   * Read back through the projection state rather than through the survivor's
+   * view, because a view filters by the survivor's id and cannot see an orphan
+   * row left behind — which is exactly how a stale edge stays invisible until
+   * something enumerates the table.
+   */
+  it("shows the repointed edge on the survivor", async () => {
+    await givenHeliosInvolving("per-4891");
+    await mergeTwoSarahs();
+
+    const view = await views.entityView("per-4172");
+
+    expect(view?.relations.map((relation) => relation.to.id)).toEqual(["per-4172"]);
   });
 
   it("carries the loser's conflicting value into the survivor's notes", async () => {

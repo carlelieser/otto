@@ -15,7 +15,7 @@ import type {
   RelatePayload,
   SetFieldPayload,
 } from "../commands/knowledge-commands.js";
-import { mergedEntity } from "./merge-entities.js";
+import { mergedEntity, type MergeSides } from "./merge-entities.js";
 import type { EntityType } from "../schema/entity-schema.js";
 import { isSameValue, type Entity, type EntityValue } from "./entity.js";
 import type { Relation } from "./relation.js";
@@ -143,25 +143,66 @@ function merge(state: KnowledgeState, event: DomainEvent): KnowledgeState {
   const survivor = state.entities.get(event.aggregate.id);
   const loser = state.entities.get(mergedId);
   if (survivor === undefined || loser === undefined || survivor.id === loser.id) return state;
-  return withRedirect(absorb(state, event, survivor, loser), loser.id, survivor.id);
+  const absorbed = absorb(state, sidesOf(state, event, survivor, loser));
+  return withRedirect(repointEdges(absorbed, loser.id, survivor.id), loser.id, survivor.id);
 }
 
-/** The survivor rewritten with both sides' values, and the loser removed. */
-function absorb(
+/** Both entities and the pointers each brought, gathered for the merge rule. */
+function sidesOf(
   state: KnowledgeState,
   event: DomainEvent,
   survivor: Entity,
   loser: Entity,
-): KnowledgeState {
-  const outcome = mergedEntity({
+): MergeSides {
+  return {
     survivor,
     loser,
     survivorPointers: state.provenance.get(survivor.id) ?? new Map(),
     loserPointers: state.provenance.get(loser.id) ?? new Map(),
     mergePointer: pointerFor(event),
-  });
-  const written = withPointers(withEntity(state, outcome.entity), survivor.id, outcome.pointers);
-  return withoutEntity(written, loser.id);
+  };
+}
+
+/** The survivor rewritten with both sides' values, and the loser removed. */
+function absorb(state: KnowledgeState, sides: MergeSides): KnowledgeState {
+  const { entity, pointers } = mergedEntity(sides);
+  const written = withPointers(withEntity(state, entity), sides.survivor.id, pointers);
+  return withoutEntity(written, sides.loser.id);
+}
+
+/**
+ * Every edge naming the merged-away identity repointed at the survivor.
+ *
+ * A relation is a reference made before the merge, and ADR-0009's promise is
+ * that those still resolve afterwards. Leaving them alone would point the edge
+ * at an id that appears in no list view — so the survivor's page would show one
+ * fewer relation than the two entities had between them, which is a fact lost to
+ * a merge that is supposed to lose nothing.
+ *
+ * Repointed here rather than resolved on read, unlike an entity id. A read
+ * resolves one id to one entity; an edge repointed on read can **collide** with
+ * an edge the survivor already had, and deduplicating at read time would mean
+ * every relation query carried the redirect table. The map is keyed by name and
+ * both ends, so rebuilding it here is what makes that collapse fall out.
+ */
+function repointEdges(state: KnowledgeState, fromId: string, toId: string): KnowledgeState {
+  const relations = new Map<string, Relation>();
+  for (const relation of state.relations.values()) {
+    const moved = repointed(relation, fromId, toId);
+    relations.set(relationKey(moved), moved);
+    if (moved !== relation) touchRelation(state.touched, relationKey(moved));
+  }
+  return { ...state, relations };
+}
+
+/** The relation with either end that named `fromId` now naming `toId`. */
+function repointed(relation: Relation, fromId: string, toId: string): Relation {
+  if (relation.from.id !== fromId && relation.to.id !== fromId) return relation;
+  return {
+    ...relation,
+    from: relation.from.id === fromId ? { ...relation.from, id: toId } : relation.from,
+    to: relation.to.id === fromId ? { ...relation.to, id: toId } : relation.to,
+  };
 }
 
 /** The loser's row and pointers gone from the projection, its id marked merged. */

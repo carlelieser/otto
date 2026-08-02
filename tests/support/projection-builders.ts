@@ -75,17 +75,14 @@ export function aFieldCleared(
 }
 
 /** An `EntitiesRelated` linking the Helios project to Sarah. */
-export function anEntitiesRelated(overrides: EventOverrides = {}): DomainEvent {
+export function anEntitiesRelated(
+  overrides: EventOverrides & { fromId?: string; toId?: string } = {},
+): DomainEvent {
+  const { fromId = "proj-helios", toId = DEFAULT_ENTITY_ID, ...rest } = overrides;
   return build(
     ENTITIES_RELATED,
-    {
-      relation: "involves",
-      fromId: "proj-helios",
-      fromType: "Project",
-      toId: DEFAULT_ENTITY_ID,
-      toType: "Person",
-    },
-    { aggregateId: "proj-helios", ...overrides },
+    { relation: "involves", fromId, fromType: "Project", toId, toType: "Person" },
+    { aggregateId: "proj-helios", ...rest },
   );
 }
 

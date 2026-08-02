@@ -7,11 +7,13 @@ import {
   entityOf,
   provenanceOf,
   redirectsIn,
+  relationsIn,
   resolveRedirect,
 } from "../../src/domain/knowledge/project-entity.js";
 import {
   aFieldSet,
   anEntitiesMerged,
+  anEntitiesRelated,
   anEntityCreated,
   aSetMemberAdded,
 } from "../support/projection-builders.js";
@@ -180,6 +182,90 @@ describe("field conflicts resolve losslessly", () => {
     );
 
     expect(entityOf(merged, "per-4172")?.fields["notes"]).toBeUndefined();
+  });
+});
+
+/**
+ * **"Nothing lost from either, and every reference made before the merge still
+ * resolving afterwards"** — which includes the edges.
+ *
+ * A relation naming the loser is a reference made before the merge. Left alone
+ * it points at an id that appears in no list view, so the survivor's page shows
+ * one fewer relation than the two entities had between them — a fact lost to a
+ * merge that is supposed to be lossless.
+ */
+describe("relations follow the merge", () => {
+  /** Helios involves the Sarah who is about to be merged away. */
+  function withHeliosInvolving(toId: string) {
+    const created = applyEvents(twoSarahs(), [
+      anEntityCreated({
+        aggregateId: "proj-1",
+        payload: { entityType: "Project", name: "Helios" },
+      }),
+    ]);
+    return applyEvent(created, anEntitiesRelated({ aggregateId: "proj-1", toId }));
+  }
+
+  it("repoints an edge that named the merged-away identity", () => {
+    const merged = applyEvent(
+      withHeliosInvolving("per-4891"),
+      anEntitiesMerged({ mergedId: "per-4891" }, { aggregateId: "per-4172" }),
+    );
+
+    expect(relationsIn(merged).map((relation) => relation.to.id)).toEqual(["per-4172"]);
+  });
+
+  it("repoints an edge that started at the merged-away identity", () => {
+    const created = applyEvents(twoSarahs(), [
+      anEntityCreated({
+        aggregateId: "proj-1",
+        payload: { entityType: "Project", name: "Helios" },
+      }),
+    ]);
+    const related = applyEvent(
+      created,
+      anEntitiesRelated({ aggregateId: "per-4891", fromId: "per-4891", toId: "proj-1" }),
+    );
+
+    const merged = applyEvent(
+      related,
+      anEntitiesMerged({ mergedId: "per-4891" }, { aggregateId: "per-4172" }),
+    );
+
+    expect(relationsIn(merged).map((relation) => relation.from.id)).toEqual(["per-4172"]);
+  });
+
+  /**
+   * Both sides holding the same edge is one edge afterwards, not two. The key
+   * is name-plus-both-ends, so repointing collapses them — which is the same
+   * union a `set` field gets, arriving through the relation map's own key.
+   */
+  it("collapses an edge both sides held into one", () => {
+    const both = applyEvent(
+      withHeliosInvolving("per-4891"),
+      anEntitiesRelated({ aggregateId: "proj-1", toId: "per-4172" }),
+    );
+
+    const merged = applyEvent(
+      both,
+      anEntitiesMerged({ mergedId: "per-4891" }, { aggregateId: "per-4172" }),
+    );
+
+    expect(relationsIn(merged)).toHaveLength(1);
+  });
+
+  it("leaves edges naming neither side alone", () => {
+    const elsewhere = applyEvent(
+      withHeliosInvolving("per-4891"),
+      anEntitiesRelated({ aggregateId: "proj-1", fromId: "proj-1", toId: "proj-1" }),
+    );
+
+    const merged = applyEvent(
+      elsewhere,
+      anEntitiesMerged({ mergedId: "per-4891" }, { aggregateId: "per-4172" }),
+    );
+
+    expect(relationsIn(merged).some((relation) => relation.to.id === "proj-1")).toBe(true);
   });
 });
 

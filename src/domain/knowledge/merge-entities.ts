@@ -101,14 +101,14 @@ function resolveField(
   notes: EntityValue[],
   loser: LoserField,
 ): void {
-  const held = fields[loser.field];
-  if (held === undefined || held.length === 0) {
-    fields[loser.field] = loser.values;
-    return;
-  }
-  fields[loser.field] = accumulates(loser)
-    ? unioned(held, loser.values)
-    : keepSurvivor(held, notes, loser);
+  const held = fields[loser.field] ?? [];
+  fields[loser.field] = combined(held, notes, loser);
+}
+
+/** The values the field ends up with: the loser's, both sides', or the survivor's. */
+function combined(held: FieldValues, notes: EntityValue[], loser: LoserField): FieldValues {
+  if (held.length === 0) return loser.values;
+  return accumulates(loser) ? unioned(held, loser.values) : keepSurvivor(held, notes, loser);
 }
 
 /**

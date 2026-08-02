@@ -240,6 +240,15 @@ export class ProposalAdjudication {
  * `capture-identity.ts` is where the *shape* of an id is fixed and JSON is a
  * property of this caller's Command rather than of the derivation.
  */
+function correctionIdFor(proposalId: string, chosen: Command): string {
+  return deriveCorrectionId({
+    proposalId,
+    chosenType: chosen.type,
+    chosenTargetId: chosen.aggregate.id,
+    chosenPayload: JSON.stringify(chosen.payload),
+  });
+}
+
 /** The default when no projection is wired: nothing was ever merged. */
 function identity(aggregateId: string): string {
   return aggregateId;
@@ -248,13 +257,4 @@ function identity(aggregateId: string): string {
 /** Whether this Command is a merge, which is restamped whether or not it moved. */
 function isMerge(command: Command): boolean {
   return command.type === MERGE_ENTITIES;
-}
-
-function correctionIdFor(proposalId: string, chosen: Command): string {
-  return deriveCorrectionId({
-    proposalId,
-    chosenType: chosen.type,
-    chosenTargetId: chosen.aggregate.id,
-    chosenPayload: JSON.stringify(chosen.payload),
-  });
 }
