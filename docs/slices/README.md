@@ -31,7 +31,8 @@ Three constraints shaped the cuts.
 | 8 | [Duplicates and merge](./08-duplicates-and-merge.md) | Two entities that are one become one | 7 |
 | 9 | [Transcript correction](./09-transcript-correction.md) | A misheard name is fixable in one step | 7 |
 | 10 | [Salience and briefs](./10-salience-and-briefs.md) | What deserves attention is surfaced daily and weekly | 6 |
-| 11 | [Dashboard and packaging](./11-dashboard-and-packaging.md) | Otto is an application the user installs and lives in | 6, 7 |
+| 12 | [Scheduled work](./12-scheduled-work.md) | Briefs and projection catch-up run on a schedule | 6, 10 |
+| 11 | [Dashboard and packaging](./11-dashboard-and-packaging.md) | Otto is an application the user installs and lives in | 6, 7, 12 |
 
 ```mermaid
 flowchart LR
@@ -40,11 +41,16 @@ flowchart LR
     S6 --> S10["10 · Salience<br/>+ briefs"]
     S7 --> S8["8 · Duplicates<br/>+ merge"]
     S7 --> S9["9 · Transcript<br/>correction"]
+    S6 --> S12["12 · Scheduled<br/>work"]
+    S10 --> S12
     S6 --> S11["11 · Dashboard<br/>+ packaging"]
     S7 --> S11
+    S12 --> S11
 ```
 
-Slices 0–7 are a chain: each needs the one before it. After 7, three branches are independent of one another — 8, 9, and 10 touch different surfaces and can be built in any order or in parallel. Slice 11 is last because it is the one that has to see all of them.
+Slices 0–7 are a chain: each needs the one before it. After 7, three branches are independent of one another — 8, 9, and 10 touch different surfaces and can be built in any order or in parallel. Slice 12 follows 10 and supplies the briefs Slice 11 renders. Slice 11 is last because it is the one that has to see all of them.
+
+Slice 12 is built before Slice 11 despite its higher number, having been cut after Slice 11 was written. Renumbering would invalidate slice references in merged pull requests and in `qa.md` §12.
 
 ## What is deliberately not a slice
 

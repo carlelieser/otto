@@ -1,6 +1,6 @@
 # Slice 11 — Dashboard and packaging
 
-> Depends on: Slices 6 and 7; surfaces everything built before it.
+> Depends on: Slices 6, 7, and 12; surfaces everything built before it.
 > Sources: [`prd.md`](../prd.md) §5.2, §5.3, §7.1; [`add.md`](../add.md) §6, §7; [`stack.md`](../stack.md) §6, §8; [`qa.md`](../qa.md) §10, §13.
 
 ## What it closes
@@ -25,7 +25,7 @@ Last, because it is the one slice that has to see all the others. Every surface 
 
 **Date precision rendered honestly** (`schema.md` §8). A `quarter`-precision date displays as "Q3" and never as a specific day. `relative_unresolved` keeps its phrase and is excluded from anything time-ordered.
 
-**The review queue and brief surfaces**, given their place in the navigation rather than existing as bare working screens.
+**The review queue and brief surfaces**, given their place in the navigation rather than existing as bare working screens. Briefs are produced by Slice 12's scheduler; brief smoke tests run against scheduler-produced briefs rather than fixtures.
 
 **Staleness handled in the local view.** An applied event is treated as immediately true rather than blocking on the projection catching up (`add.md` §6). This is the one non-obvious UI behaviour and it gets real tests.
 

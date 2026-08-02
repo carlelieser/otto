@@ -39,6 +39,7 @@ Each term is specified with its coefficients in `salience.md` §2. Two worth res
 
 ## Not in scope
 
+- **The schedule that fires brief production.** Slice 12. `salience.md` §4 specifies that briefs are generated on a schedule; this slice builds `BriefProduction.produce(kind, now)` and leaves it without a caller.
 - **Brief customisation and delivery outside the app.** Post-MVP (PRD §7.2).
 - **Salience v1.** By construction. The path from v0 to v1 is a measurement, not a redesign.
 - **Push notifications.** Briefs are surfaced in the dashboard; the tray badge is the only signal.
