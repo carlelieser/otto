@@ -1,0 +1,18 @@
+{
+  "measurement": "vector-search-top-20",
+  "what_is_timed": "Exact cosine search over 3,000 Person embeddings at 384 dimensions, returning the nearest 20. In-process over BLOB columns per ADR-0021, not through a loadable extension. Includes reading every row back out of SQLite, which is the dominant cost and the one a real query pays.",
+  "corpus": {
+    "entities": 3000,
+    "dimensions": 384,
+    "top_k": 20
+  },
+  "runs": 200,
+  "median_ms": 9.624834000000192,
+  "p95_ms": 13.795415999999932,
+  "bar_ms": 100,
+  "fail_ms": 500,
+  "machine": "arm64",
+  "os": "darwin",
+  "supersedes": "runtime.md §4's 0.3 ms row, which was measured on asg017/sqlite-vec 0.1.9 — a different project from the extension §4.3 named, and a different implementation from the one ADR-0021 settled on.",
+  "embeddings": "Synthetic, from InMemoryEmbedder. This measures the index and not retrieval quality, which stays an eval-set question (runtime.md §4.2)."
+}

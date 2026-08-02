@@ -13,9 +13,15 @@ import { LOCAL_PROVIDER, LocalExtractor } from "./infrastructure/llm/local-extra
 import { OPENAI_PROVIDER, OpenAiExtractor } from "./infrastructure/llm/openai-extractor.js";
 import { SqliteCaptureStore } from "./infrastructure/persistence/sqlite-capture-store.js";
 import { SqliteEventStore } from "./infrastructure/persistence/sqlite-event-store.js";
+import { SqliteEntityRepository } from "./infrastructure/persistence/sqlite-entity-repository.js";
 import { SqliteProposalStore } from "./infrastructure/persistence/sqlite-proposal-store.js";
+import { LocalEmbedder } from "./infrastructure/embedding/local-embedder.js";
+import { LocalAdjudicator } from "./infrastructure/llm/local-adjudicator.js";
 import { WhisperCliTranscriber } from "./infrastructure/transcription/whisper-cli-transcriber.js";
+import type { CandidateReads } from "./inference/resolution/candidate-generation.js";
+import type { Adjudicator } from "./ports/adjudicator.js";
 import type { CaptureStore } from "./ports/capture-store.js";
+import type { Embedder } from "./ports/embedder.js";
 import type { EventStore } from "./ports/event-store.js";
 import type { Extractor } from "./ports/extractor.js";
 import type { ProposalStore } from "./ports/proposal-store.js";
@@ -66,6 +72,16 @@ export interface Storage {
    * property of the design rather than a constraint WAL imposes on it.
    */
   readonly proposals: ProposalStore;
+  /**
+   * The entity projection resolution reads current knowledge through.
+   *
+   * On the same connection as the rest, and derived rather than truth — every
+   * `projection_` table is droppable and rebuildable from the log alone
+   * (`add.md` §6). The concrete type is exposed rather than the port because
+   * the projection worker writes through it; `inference/` is handed the reads
+   * only, which is what keeps ADR-0003 structural.
+   */
+  readonly entities: SqliteEntityRepository;
   /** Closes the shared connection. No store owns it, so none of them closes it. */
   readonly close: () => void;
 }
@@ -76,7 +92,71 @@ export function createStorage(options: StorageOptions = {}): Storage {
     events: new SqliteEventStore(database),
     captures: new SqliteCaptureStore(database),
     proposals: new SqliteProposalStore(database),
+    entities: new SqliteEntityRepository(database),
     close: () => database.close(),
+  };
+}
+
+/**
+ * The embedder, which is local always and has no cloud option
+ * (`runtime.md` §2, `stack.md` §5).
+ *
+ * The one inference port with no opt-in cloud adapter. Embeddings serve
+ * candidate generation rather than user-facing search, the quality bar is
+ * "narrow thousands of entities to a handful," and sending every entity the
+ * user knows to a provider for that job is a privacy cost with no return.
+ */
+export function createEmbedder(options: EmbeddingOptions = {}): Embedder {
+  const baseUrl = options.baseUrl ?? process.env.OTTO_LOCAL_BASE_URL;
+  const model = options.model ?? process.env.OTTO_EMBEDDING_MODEL;
+  return new LocalEmbedder({
+    ...(baseUrl === undefined ? {} : { baseUrl }),
+    ...(model === undefined ? {} : { model }),
+  });
+}
+
+export interface EmbeddingOptions {
+  readonly baseUrl?: string;
+  readonly model?: string;
+}
+
+/**
+ * The adjudicator, configured **per port** rather than globally
+ * (`add.md` §9).
+ *
+ * A user may want cloud extraction and local adjudication: the two are
+ * different jobs with different costs, since extraction reads a whole note
+ * under a grammar and adjudication picks one of four. Defaults to local for
+ * ADR-0016's reason — the unconfigured state is the primary configuration.
+ */
+export function createAdjudicator(options: AdjudicationOptions = {}): Adjudicator {
+  const baseUrl = options.baseUrl ?? process.env.OTTO_LOCAL_BASE_URL;
+  const model = options.model ?? process.env.OTTO_ADJUDICATION_MODEL;
+  return new LocalAdjudicator({
+    ...(baseUrl === undefined ? {} : { baseUrl }),
+    ...(model === undefined ? {} : { model }),
+  });
+}
+
+export interface AdjudicationOptions {
+  readonly baseUrl?: string;
+  readonly model?: string;
+}
+
+/**
+ * The reads resolution is given, narrowed to exactly what it may do.
+ *
+ * `inference/` never names a repository port (`add.md` §3), so this is the
+ * function that hands it the three reads and nothing else. The narrowing is
+ * the point: what resolution cannot write is not a rule someone has to
+ * remember, it is an object with no write method on it.
+ */
+export function createCandidateReads(storage: Storage): CandidateReads {
+  const { entities } = storage;
+  return {
+    byExactName: (name, type) => entities.byExactName(name, type),
+    byFuzzyName: (name, type) => entities.byFuzzyName(name, type),
+    byNearestEmbedding: (query) => entities.byNearestEmbedding(query),
   };
 }
 

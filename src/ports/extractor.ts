@@ -1,5 +1,5 @@
+import type { ClaimedValue } from "../domain/knowledge/claimed-value.js";
 import type { EntityType } from "../domain/schema/entity-schema.js";
-import type { ResolvedDate } from "../domain/values/resolved-date.js";
 
 /**
  * A Capture's text in, structured Mentions and the values claimed about them
@@ -105,19 +105,15 @@ export interface Mention {
   readonly confidence: number;
 }
 
-/** One field value claimed about a Mention. */
-export interface FieldValue {
-  /** A field name from `schema.md`'s tables. An unknown name never reaches here. */
-  readonly field: string;
-  /**
-   * The value, typed by the field's declared type: a `date` field carries a
-   * `ResolvedDate`, everything else a string.
-   *
-   * A `set` field contributes one `FieldValue` per member rather than an array,
-   * so the differ's union has members to union rather than a list to diff.
-   */
-  readonly value: string | ResolvedDate;
-}
+/**
+ * One field value claimed about a Mention.
+ *
+ * Defined in `domain/knowledge/` rather than here, and re-exported under the
+ * name extraction already uses. The move is what keeps the differ — the one
+ * stage with no model in it — from importing a model-facing port to name the
+ * type of its own input (`add.md` §5.4).
+ */
+export type FieldValue = ClaimedValue;
 
 /** A field the model emitted that the schema does not permit. */
 export interface SchemaViolation {
