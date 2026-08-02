@@ -77,6 +77,36 @@ const REFUSED_MUTATIONS = [
  * — a row per claimed field value — is a schema that has to change every time
  * `schema.md` does, which is the coupling `entity-schema.ts` exists to keep in
  * one place.
+ *
+ * ## The `projection_` prefix is load-bearing
+ *
+ * Slice 4 adds the entity projection, and `add.md` §10 asks for exactly this:
+ * derived tables in their own namespace, so "is this rebuildable?" is
+ * answerable by looking at the name rather than by reading the projection code.
+ * Every `projection_` table is droppable and rebuildable from the log alone,
+ * and none of them carries an immutability trigger — a table that rebuilds is a
+ * table something must be able to delete from.
+ *
+ * `fields` holds an entity's typed values as JSON for the same reason `mention`
+ * does: the alternative is a column per field in `schema.md`, and a schema
+ * migration every time a field is added. The read path selects a whole entity
+ * (`add.md` §7) rather than querying one field across entities, so nothing
+ * needs them as columns. `name` is the exception, lifted out as a real column
+ * because candidate generation queries it directly and a JSON extract cannot be
+ * indexed usefully.
+ *
+ * `projection_aliases` is a table rather than a member of the `fields` JSON for
+ * the same reason: `aliases` "feeds candidate generation directly"
+ * (`schema.md` §2), and the exact-match query is the cheapest and
+ * highest-precision of the three candidate sources. It is a projection of the
+ * `aliases` field rather than a second truth about it.
+ *
+ * `projection_embeddings.embedding` is a **`BLOB` in an ordinary table, not a
+ * virtual table** (`runtime.md` §4.3). SQLite-Vector 1.0 works this way, which
+ * is the one piece of the storage spike's schema that does not transfer as
+ * written — the spike used a `sqlite-vec` virtual table and that is a different
+ * project. Float32, since quantization trades recall for a resource Otto is not
+ * short of at 3,000 entities.
  */
 export const CREATE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS captures (
@@ -118,9 +148,44 @@ CREATE TABLE IF NOT EXISTS extraction_proposals (
   extracted_at        TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS projection_entities (
+  entity_id           TEXT PRIMARY KEY,
+  entity_type         TEXT NOT NULL,
+  fields              TEXT NOT NULL,
+  name                TEXT NOT NULL,
+  version             INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_aliases (
+  entity_id           TEXT NOT NULL,
+  alias               TEXT NOT NULL,
+  PRIMARY KEY (entity_id, alias)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_relations (
+  relation_name       TEXT NOT NULL,
+  from_id             TEXT NOT NULL,
+  from_type           TEXT NOT NULL,
+  to_id               TEXT NOT NULL,
+  to_type             TEXT NOT NULL,
+  PRIMARY KEY (relation_name, from_id, to_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS projection_embeddings (
+  entity_id           TEXT PRIMARY KEY,
+  entity_type         TEXT NOT NULL,
+  embedding           BLOB NOT NULL,
+  model_version       TEXT NOT NULL
+) STRICT;
+
 CREATE INDEX IF NOT EXISTS events_by_aggregate ON events (aggregate_id, aggregate_version);
 CREATE INDEX IF NOT EXISTS events_by_capture ON events (capture_id);
 CREATE INDEX IF NOT EXISTS proposals_by_capture ON extraction_proposals (capture_id, ordinal);
+CREATE INDEX IF NOT EXISTS entities_by_type ON projection_entities (entity_type, name);
+CREATE INDEX IF NOT EXISTS aliases_by_alias ON projection_aliases (alias);
+CREATE INDEX IF NOT EXISTS relations_by_from ON projection_relations (from_id);
+CREATE INDEX IF NOT EXISTS relations_by_to ON projection_relations (to_id);
+CREATE INDEX IF NOT EXISTS embeddings_by_type ON projection_embeddings (entity_type);
 
 ${insertOnlyTriggers("events")}
 ${insertOnlyTriggers("captures")}

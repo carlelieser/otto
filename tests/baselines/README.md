@@ -15,6 +15,16 @@ collapse; the baseline catches the drift that gets you there.
   Produced by `cargo run --bin measure-latency`, which needs a windowing
   session.
 
+- **`vector-search.json`** — top-20 over 3,000 entity embeddings (Slice 4).
+  This is the re-measurement `runtime.md` §4.3 asked for: the 0.3 ms row in
+  `runtime.md` §4 was taken on `asg017/sqlite-vec` 0.1.9, which is neither the
+  extension §4.3 named nor the implementation ADR-0021 settled on. Written by
+  `npm run test:local` and committed, because the machine is recorded with it.
+
+  **It is the tightest margin in the suite** — 13.8 ms against a 100 ms bar,
+  where every other row passes by 20× or better — so it is the row that moves
+  first. The scan is linear in entity count, which is what to watch.
+
 ## To be generated on your machine
 
 Neither is committed yet, because a number taken anywhere else describes the
