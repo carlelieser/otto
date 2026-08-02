@@ -1,6 +1,7 @@
 import type { BriefKind, BriefSelection } from "../../inference/salience/brief-selection.js";
 import type { BriefGenerator } from "../../ports/brief-generator.js";
 import type { BriefStore, BriefWriteResult, StoredBrief } from "../../ports/brief-store.js";
+import { localDateOf } from "../schedule/local-time.js";
 import { composeBrief } from "./compose-brief.js";
 
 /**
@@ -55,8 +56,13 @@ export class BriefWriting {
  * runs on the same day compute the same id and the second insert does nothing —
  * the same idempotency substrate the event log uses (`runtime.md` §3).
  *
- * The date is UTC, matching every other instant that crosses a boundary here.
+ * **The date is local rather than UTC**, which is the one place in the system
+ * an instant is not reduced to UTC when it crosses a boundary. A brief is about
+ * the user's day: at a positive UTC offset the 06:00 trigger fires while UTC is
+ * still on the previous date, so a UTC-derived id would name the day before the
+ * one the brief covers — and, because the id is also the idempotency key, would
+ * then collide with the next morning's brief (`local-time.ts`).
  */
 export function briefIdFor(kind: BriefKind, coversTo: string): string {
-  return `${kind}-${new Date(coversTo).toISOString().slice(0, 10)}`;
+  return `${kind}-${localDateOf(coversTo)}`;
 }
