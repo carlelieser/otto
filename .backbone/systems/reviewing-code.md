@@ -132,19 +132,24 @@ and should not be reported.
 A design finding blocks the pull request **only when it is actionable within the
 diff's existing scope**. A finding larger than that — a restructuring the change
 did not cause and cannot reasonably absorb — is recorded in the pull request body
-under known gaps or scope, or raised as an architecture decision record, and does
-not gate the merge.
+as a known gap or a pre-existing issue, or raised as an architecture decision
+record, and does not gate the merge.
 
 Without this rule, the design axis becomes the reason work stops merging.
 
 ## Output
 
-The review writes one file to `.backbone/scratch/`, which is not committed. The
-durable record of what review found is the pull request body; this file is the
-working artifact that feeds it.
+The review writes one file to `.backbone/scratch/`, which is not committed. It is
+the durable record of what the review found: every finding, and what was done
+about it.
 
-It persists after the pull request is opened. If a finding was transcribed into
-the body incorrectly, this file is the only way to detect that.
+Most findings end there. A fixed finding is visible in the commit that fixed it,
+and the pull request body describes the final state rather than the route to it
+(`opening-a-pull-request.md`), so only a finding leaving something still true at
+merge reaches the body.
+
+The file persists after the pull request is opened, because it is the only place
+the full set survives.
 
 ### Required contents
 
@@ -183,7 +188,7 @@ the fact. The two are different acts.
 
 - **Incorrect** — the reviewer misread the code. State what it actually does.
 - **Out of scope** — the finding is real but belongs to different work. It is
-  then recorded in the pull request body under known gaps, or raised as an
+  then recorded in the pull request body as a pre-existing issue, or raised as an
   architecture decision record.
 - **Deliberate** — the code is that way on purpose. State the purpose.
 - **Disagreement** — a judgment call the author rejects, with reasoning.
@@ -214,6 +219,20 @@ documentation or formatting do not require it.
 The trigger is checkable rather than a matter of judgment: did any fix change
 code that runs?
 
+**Re-review runs the axes whose subject the fixes touched, not always all four.**
+A fix to executing code changes what correctness and design examine; it leaves
+the specification untouched, so intent has nothing new to read unless the fix
+changed what the work delivers. Each re-run axis is told what was found before
+and what was done about it, so it verifies the fix rather than rediscovering the
+defect.
+
+An axis is re-run whole. Narrowing it to the finding it raised is what lets a fix
+introduce a defect beside the one it repaired.
+
+**A re-review is pinned to the commit it read.** No commit is added while one is
+running; a fix that lands underneath a re-review invalidates it, and its findings
+have to be checked against the final state by hand.
+
 ## Failure modes this system exists to prevent
 
 - A review that reports nothing and cannot be distinguished from one that did not
@@ -236,18 +255,23 @@ surfaced.
 
 Isolation earned its cost. The rules axis reported two pre-existing threshold
 breaches that the design axis, holding the rationale for the module, did not
-raise. Four agents produced two overlapping findings out of thirteen, which is a
-lower duplication rate than the four-way split predicted.
+raise. Four agents produced thirteen findings, two of which overlapped.
 
-One correction to this document followed from the run: the instruction to record
-declinations in the pull request body was wrong, and is replaced above.
+Corrections to this document followed from the run, each made above:
 
-Two limits observed and not yet resolved:
+- The instruction to record declinations in the pull request body was wrong, and
+  the Output section stated the same inverted model — that the body is the
+  durable record of what review found. The scratch file is.
+- The re-review rule did not say which axes re-run, so the first run chose a
+  subset without the document sanctioning it. It now does.
+- A re-review ran while a later commit landed, and reported the working tree
+  changing beneath it; its findings had to be checked against the final state by
+  hand. No commit is added while a re-review runs.
+- The "out of scope" declination routed a finding to known gaps in one paragraph
+  and to pre-existing issues in another, for the same condition.
 
-- **A re-review pinned to a commit goes stale if work continues.** The
-  correctness re-review ran while a later commit landed and reported the working
-  tree changing beneath it. Its findings had to be re-checked by hand against the
-  final state.
-- **An axis cannot see what another axis fixed.** The design axis re-reviewed a
-  change the correctness axis had made, and reported it as new work rather than
-  as a fix, which is correct but reads as duplication.
+One limit observed and not resolved: **an axis cannot see what another axis
+fixed.** The design axis re-reviewed a change the correctness axis had made and
+reported it as new work rather than as a fix. That is correct behaviour for an
+isolated agent and the cost of the isolation, but it reads as duplication and
+leaves the author to recognise it.

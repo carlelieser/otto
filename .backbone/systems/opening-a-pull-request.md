@@ -153,6 +153,9 @@ to those rules does not reliably produce a body that obeys them.
 
 ### 5. Open the pull request
 
+Against `main`. The title follows Conventional Commits, as commit subjects do,
+and names the capability the work delivers rather than the files it touches.
+
 ### 6. Confirm continuous integration is green
 
 Both jobs: `verify` and `host`.
@@ -161,6 +164,12 @@ Both jobs: `verify` and `host`.
 
 The decision is the author's, informed by the review. The review advises; it does
 not decide.
+
+The procedure ends here. Before adding any commit to a branch, confirm its pull
+request is still open: a branch whose pull request has merged is closed to
+further work, and a commit pushed to it is stranded — pushed, on no default
+branch, and in no open pull request. Work that arrives after the merge starts a
+new branch and a new run of this procedure.
 
 ## Failure modes this system exists to prevent
 
@@ -176,7 +185,7 @@ not decide.
 ## Validation
 
 **First executed on Slice 12** (pull request #23, merged). The procedure held.
-Four defects in this document surfaced and are corrected above.
+Five defects in this document surfaced and are corrected above.
 
 **The body must describe the final state, not the route to it.** The optional
 sections included a trigger for review findings, which produced a body narrating
@@ -195,6 +204,10 @@ published, not only written from it.
 **The pull request state is re-read before any commit is added to its branch.**
 A commit was pushed to a branch whose pull request had already merged, stranding
 it. Step 7 ends the procedure; work after it starts a new one.
+
+**Step 5 said only "Open the pull request."** It named no base branch and no
+title convention, and the first title it produced was two fragments joined by a
+comma. Both are now stated.
 
 Nothing in the procedure proved unworkable. The pre-flight gate caught a
 non-working commit before review, and the review caught a defect that the test
