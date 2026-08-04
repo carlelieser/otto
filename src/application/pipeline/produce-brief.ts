@@ -45,6 +45,17 @@ export class BriefProduction {
     const select = kind === "daily" ? selectDaily : selectWeekly;
     return this.#writing.write(select(entities, relations, now, this.#coefficients), now);
   }
+
+  /**
+   * Whether the brief covering `covers` is already written.
+   *
+   * Here rather than on the caller so that the id rule stays with the module
+   * that owns it: a scheduler asking this question separately would have to
+   * re-derive `briefIdFor` and hold a `BriefStore` of its own.
+   */
+  async exists(kind: BriefKind, covers: string): Promise<boolean> {
+    return this.#writing.exists(kind, covers);
+  }
 }
 
 export interface BriefProductionDependencies {

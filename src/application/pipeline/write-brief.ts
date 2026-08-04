@@ -37,6 +37,17 @@ export class BriefWriting {
     return this.#briefs.put(await this.#compose(briefId, selection, generatedAt));
   }
 
+  /**
+   * Whether the brief covering `covers` is already written.
+   *
+   * The same question `write` asks, answered before the log is read rather than
+   * after. `write` remains the guarantee — this only saves a caller the fold and
+   * the model call when the answer is already stored.
+   */
+  async exists(kind: BriefKind, covers: string): Promise<boolean> {
+    return (await this.#briefs.byId(briefIdFor(kind, covers))) !== undefined;
+  }
+
   async #compose(
     briefId: string,
     selection: BriefSelection,

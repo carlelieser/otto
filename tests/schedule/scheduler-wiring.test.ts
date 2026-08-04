@@ -32,12 +32,12 @@ describe("the scheduler is omitted when nothing is wired", () => {
     expect(createScheduler({})).toBeUndefined();
   });
 
-  it("returns nothing when briefs are wired without a production", () => {
-    expect(createScheduler({ briefs: storage.briefs })).toBeUndefined();
-  });
-
   it("returns a scheduler once the projection worker is wired", () => {
     expect(createScheduler({ worker: createProjectionWorker(storage) })).toBeDefined();
+  });
+
+  it("returns a scheduler when only brief production is wired", () => {
+    expect(createScheduler({ production: createBriefProduction(storage) })).toBeDefined();
   });
 });
 
@@ -46,7 +46,6 @@ describe("the tasks a full wiring produces", () => {
     const tasks = scheduledTasks({
       worker: createProjectionWorker(storage),
       production: createBriefProduction(storage),
-      briefs: storage.briefs,
     });
 
     expect(tasks.map((task) => task.name)).toEqual([

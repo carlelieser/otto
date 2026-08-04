@@ -97,7 +97,6 @@ function startScheduledWork(storage: Storage): void {
   createScheduler({
     worker: createProjectionWorker(storage),
     production: createBriefProduction(storage),
-    briefs: storage.briefs,
   })?.start();
 }
 

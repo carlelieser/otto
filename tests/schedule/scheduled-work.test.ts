@@ -74,7 +74,6 @@ function tasksFor(generator: BriefGenerator) {
   return scheduledTasks({
     worker: createProjectionWorker(storage),
     production,
-    briefs: storage.briefs,
   });
 }
 

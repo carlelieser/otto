@@ -1,6 +1,4 @@
 import { BRIEF_KINDS, type BriefKind } from "../../inference/salience/brief-selection.js";
-import type { BriefStore } from "../../ports/brief-store.js";
-import { briefIdFor } from "../pipeline/write-brief.js";
 import type { BriefProduction } from "../pipeline/produce-brief.js";
 import type { ProjectionWorker } from "../projection/projection-worker.js";
 import { dueBriefWindows } from "./brief-windows.js";
@@ -47,25 +45,16 @@ export function projectionCatchUpTask(worker: ProjectionWorker): ScheduledTask {
  * of it is an optimisation — it saves reading the whole log for a window that
  * is already written — rather than the thing that makes repeated ticks safe.
  */
-export function briefTask(
-  kind: BriefKind,
-  production: BriefProduction,
-  briefs: BriefStore,
-): ScheduledTask {
+export function briefTask(kind: BriefKind, production: BriefProduction): ScheduledTask {
   return {
     name: `${kind} brief`,
     run: async (now) => {
-      const windows = await dueBriefWindows(kind, now, (covers) => isStored(briefs, kind, covers));
+      const windows = await dueBriefWindows(kind, now, (covers) => production.exists(kind, covers));
       for (const covers of windows) {
         await production.produce(kind, covers);
       }
     },
   };
-}
-
-/** Whether the brief for the window covering this instant is already written. */
-async function isStored(briefs: BriefStore, kind: BriefKind, covers: string): Promise<boolean> {
-  return (await briefs.byId(briefIdFor(kind, covers))) !== undefined;
 }
 
 /**
@@ -77,12 +66,10 @@ async function isStored(briefs: BriefStore, kind: BriefKind, covers: string): Pr
  * of a model call the user is about to read the result of.
  */
 export function scheduledTasks(dependencies: ScheduledWork): readonly ScheduledTask[] {
-  const { worker, production, briefs } = dependencies;
+  const { worker, production } = dependencies;
   return [
     ...(worker === undefined ? [] : [projectionCatchUpTask(worker)]),
-    ...(production === undefined || briefs === undefined
-      ? []
-      : BRIEF_KINDS.map((kind) => briefTask(kind, production, briefs))),
+    ...(production === undefined ? [] : BRIEF_KINDS.map((kind) => briefTask(kind, production))),
   ];
 }
 
@@ -92,9 +79,13 @@ export function scheduledTasks(dependencies: ScheduledWork): readonly ScheduledT
  * Optional so that a host wiring only one of them gets only that one's tasks,
  * and so that "the scheduler is omitted when no tasks are wired" is a fact
  * about an empty list rather than a flag someone sets.
+ *
+ * One field per half rather than a production and the store it was built from:
+ * two fields that must agree can disagree, and the wiring that names a store
+ * without a production is a state worth making unrepresentable rather than
+ * testing for.
  */
 export interface ScheduledWork {
   readonly worker?: ProjectionWorker;
   readonly production?: BriefProduction;
-  readonly briefs?: BriefStore;
 }
