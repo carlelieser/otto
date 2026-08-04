@@ -8,6 +8,7 @@ src-tauri/target/
 # Specifications and project instructions are authored by hand; reformatting
 # them produces diffs that have nothing to do with the code.
 docs/
+.backbone/
 CONTEXT.md
 CLAUDE.md
 AGENTS.md
