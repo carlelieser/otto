@@ -127,12 +127,36 @@ describe("the weekly window", () => {
     expect(datesOf(windows)).toContain("2026-08-03");
   });
 
+  /**
+   * Monday's own brief waits for the trigger hour, but the week before it is
+   * still outstanding until then — a tick at 05:00 owes the previous Monday
+   * rather than nothing.
+   */
   it("is not due before the trigger hour on Monday", async () => {
     setTimezone("UTC");
 
     const windows = await dueBriefWindows("weekly", "2026-08-03T05:00:00.000Z", NONE_STORED);
 
-    expect(windows).toEqual([]);
+    expect(datesOf(windows)).toEqual(["2026-07-27"]);
+  });
+
+  /**
+   * The gap this covers: before the trigger hour on a Monday, the current
+   * week's Monday is the only one a seven-day lookback reaches, and it has not
+   * triggered yet. A brief missed the previous week is six days and eighteen
+   * hours old — inside the bound — and was reachable at 23:00 the night before.
+   * Without the eighth day it disappears at midnight and is skipped for good at
+   * 06:00, which is a week's brief lost silently rather than a bound doing its
+   * job.
+   */
+  it("still owes the previous Monday during Monday's small hours", async () => {
+    setTimezone("UTC");
+
+    const sunday = await dueBriefWindows("weekly", "2026-08-09T23:00:00.000Z", NONE_STORED);
+    const monday = await dueBriefWindows("weekly", "2026-08-10T03:00:00.000Z", NONE_STORED);
+
+    expect(datesOf(sunday)).toEqual(["2026-08-03"]);
+    expect(datesOf(monday)).toEqual(["2026-08-03"]);
   });
 
   /** Tuesday still owes Monday's brief; the bound is one week back. */
@@ -161,17 +185,23 @@ describe("the weekly window", () => {
   });
 
   /**
-   * The seven-day bound holds exactly one Monday whatever day it is read on,
-   * which is what keeps a tick to one weekly brief. An eight-day bound would
-   * hold two every Monday — the day the current week's brief is due, and so the
-   * day a duplicate would be most visible.
+   * Exactly one Monday is due whatever day and hour it is read on, which is
+   * what keeps a tick to one weekly brief.
+   *
+   * The eight-day lookback holds two Mondays on a Monday, and the trigger-hour
+   * check is what resolves them to one: before 06:00 the current week's has not
+   * opened and the previous week's is owed, after 06:00 the reverse. Reading
+   * every hour rather than one is what distinguishes that from a bound that
+   * simply empties.
    */
-  it("finds exactly one Monday on every day of the week", async () => {
+  it("finds exactly one Monday at every hour of every day of the week", async () => {
     setTimezone("UTC");
 
     for (let day = 2; day <= 8; day += 1) {
-      const at = `2026-08-0${day}T09:00:00.000Z`;
-      expect(await dueBriefWindows("weekly", at, NONE_STORED)).toHaveLength(1);
+      for (let hour = 0; hour < 24; hour += 1) {
+        const at = `2026-08-0${day}T${String(hour).padStart(2, "0")}:00:00.000Z`;
+        expect(await dueBriefWindows("weekly", at, NONE_STORED)).toHaveLength(1);
+      }
     }
   });
 });

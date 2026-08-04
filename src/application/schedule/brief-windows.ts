@@ -1,5 +1,5 @@
 import type { BriefKind } from "../../inference/salience/brief-selection.js";
-import { daysEarlier, localDateOf, localHourOf, localWeekdayOf } from "./local-time.js";
+import { daysEarlier, localHourOf, localWeekdayOf } from "./local-time.js";
 
 /**
  * Which brief windows an instant leaves outstanding (Slice 12).
@@ -40,6 +40,12 @@ const WEEKLY_DAY = 1;
  * rather than the absence of one. **Older windows are skipped permanently**:
  * nothing records that they were missed, because the brief that would have been
  * written is the only thing that would have recorded it.
+ *
+ * The bound counts windows that have opened rather than calendar days back
+ * from the tick. Before the trigger hour the current day's window has not
+ * opened, so the span starts at yesterday and reaches one day further back —
+ * which is what keeps a Monday at 03:00 owing the previous Monday rather than
+ * nothing, without owing two once 06:00 has passed.
  */
 const CATCH_UP_DAYS: Readonly<Record<BriefKind, number>> = { daily: 2, weekly: 7 };
 
@@ -73,29 +79,38 @@ export async function dueBriefWindows(
  */
 function candidateWindows(kind: BriefKind, now: string): readonly string[] {
   const windows: string[] = [];
+  const opened = mostRecentOpenDay(now);
   for (let back = 0; back < CATCH_UP_DAYS[kind]; back += 1) {
-    const day = daysEarlier(now, back);
-    if (hasTriggered(kind, day, now)) windows.push(triggerInstantOf(day));
+    const day = daysEarlier(opened, back);
+    if (fallsOnWindowDay(kind, day)) windows.push(triggerInstantOf(day));
   }
   return windows.reverse();
 }
 
 /**
- * Whether the window on `day`'s date has opened by `now`.
+ * The latest day whose trigger hour has passed: today once it has, else
+ * yesterday.
  *
- * `day` carries `now`'s time of day rather than the trigger hour — it is a
- * point on a date rather than a window — so only its date and weekday are read
- * here. `triggerInstantOf` is what turns it into the instant a brief covers.
- *
- * A past day's window opened whenever its trigger hour arrived, so only the
- * current day has to be checked against the hour. The weekly kind additionally
- * has to fall on its weekday, which is what makes a Tuesday tick that missed
- * Monday find Monday's window rather than Tuesday's.
+ * Anchoring the walk here rather than at the tick's own date is what makes the
+ * bound count opened windows rather than calendar days. Anchored at the tick,
+ * the pre-06:00 hours lose their oldest window — for the weekly kind that is
+ * every window, because the only Monday a seven-day span then reaches is
+ * today's, which has not opened.
  */
-function hasTriggered(kind: BriefKind, day: string, now: string): boolean {
-  if (kind === "weekly" && localWeekdayOf(day) !== WEEKLY_DAY) return false;
-  if (localDateOf(day) !== localDateOf(now)) return true;
-  return localHourOf(now) >= TRIGGER_HOUR;
+function mostRecentOpenDay(now: string): string {
+  return localHourOf(now) >= TRIGGER_HOUR ? now : daysEarlier(now, 1);
+}
+
+/**
+ * Whether a window of `kind` falls on this day at all.
+ *
+ * Every day carries a daily window; only Monday carries a weekly one, which is
+ * what makes a Tuesday tick that missed Monday find Monday's window rather than
+ * Tuesday's. Whether the window has *opened* is already settled by the anchor,
+ * so the hour is not read here.
+ */
+function fallsOnWindowDay(kind: BriefKind, day: string): boolean {
+  return kind !== "weekly" || localWeekdayOf(day) === WEEKLY_DAY;
 }
 
 /**
