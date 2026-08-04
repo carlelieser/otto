@@ -39,6 +39,16 @@ All decisions needed to begin implementation are settled. Where these documents 
 | [0016](./adr/0016-local-inference-is-the-default.md) | Local inference is the default; cloud is opt-in and configurable per port |
 | [0017](./adr/0017-pinned-runtime-toolchain-and-sidecar-spawn.md) | Pinned Rust and Tauri versions; `cpal`/`hound` for audio; the sidecar spawn seam |
 | [0018](./adr/0018-voice-ingestion-is-one-call.md) | Voice ingestion is one sidecar call; the host supplies recording-start time |
+| [0019](./adr/0019-proposals-are-derived-state-in-their-own-table.md) | Proposals are derived state in their own table, not a third truth |
+| [0020](./adr/0020-the-schema-tables-are-code-and-the-document-is-the-authority.md) | The schema tables are code; `schema.md` is the authority a test enforces |
+| [0021](./adr/0021-exact-vector-search-defers-the-extension-licence.md) | Exact vector search in process; the extension's licence defers bundling |
+| [0022](./adr/0022-bootstrap-withholds-resolution-and-dispositions-are-their-own-table.md) | Bootstrap withholds resolution-requiring proposals; dispositions are their own table |
+| [0023](./adr/0023-the-fold-is-pure-and-provenance-is-its-own-table.md) | The fold is pure, provenance is its own table, and the writer persists only what a batch touched |
+| [0024](./adr/0024-the-counterfactual-is-a-command-and-the-corpus-survives-rebuild.md) | The counterfactual is a Command; the correction corpus survives a rebuild |
+| [0025](./adr/0025-merge-is-a-fold-and-redirects-resolve-on-read.md) | Merge is a fold over the survivor; redirects resolve on read |
+| [0026](./adr/0026-corrections-narrow-the-immutability-trigger.md) | A correction narrows the immutability trigger; the automatic re-run stops at extraction |
+| [0027](./adr/0027-a-brief-is-a-record-not-a-projection.md) | A brief is a record, not a projection |
+| [0028](./adr/0028-scheduled-work-is-stateless-and-bounded.md) | Scheduled work is stateless and bounded |
 
 ## Before the first line of code
 

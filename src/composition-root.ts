@@ -10,6 +10,7 @@ import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
 import { ProposalAdjudication } from "./application/pipeline/adjudicate-proposal.js";
 import { DuplicateDetection } from "./application/pipeline/detect-duplicates.js";
 import { CaptureTriage, type CorrectionCounts } from "./application/pipeline/triage-capture.js";
+export { createBriefProduction, createScheduler } from "./composition/schedule-wiring.js";
 import { ReviewQueue } from "./application/surface/read-review-queue.js";
 import { BootstrapStatus } from "./application/surface/read-bootstrap-status.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";

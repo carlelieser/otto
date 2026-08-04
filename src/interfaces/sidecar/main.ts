@@ -3,14 +3,18 @@ import { pathToFileURL } from "node:url";
 import {
   createAdjudication,
   createBootstrapStatus,
+  createBriefProduction,
   createDuplicateDetection,
   createExtraction,
   createExtractor,
   createIngestion,
+  createProjectionWorker,
   createRecovery,
   createReviewQueue,
+  createScheduler,
   createStorage,
   createTranscriber,
+  type Storage,
 } from "../../composition-root.js";
 import { dispatch, type Methods } from "./dispatch.js";
 import { sidecarMethods } from "./methods.js";
@@ -54,6 +58,7 @@ async function startCaptureSidecar(): Promise<void> {
   const storage = createStorage(databaseFile === undefined ? {} : { databaseFile });
   const ingestion = createIngestion(storage);
   await createRecovery(storage, ingestion).recoverUningestedCaptures();
+  startScheduledWork(storage);
   // `createExtractor` reads the environment and falls back to the local path,
   // so an unconfigured sidecar starts and serves rather than refusing to boot
   // (ADR-0016). Nothing here checks for a key.
@@ -71,6 +76,28 @@ async function startCaptureSidecar(): Promise<void> {
       duplicates: createDuplicateDetection(storage),
     }),
   );
+}
+
+/**
+ * The periodic half of the sidecar: briefs on their trigger hour, and the
+ * projection kept close to the log (Slice 12).
+ *
+ * Started after the recovery sweep and before the request loop, because the
+ * sweep is the moment both processes agree nothing is mid-write and the request
+ * loop never returns. Nothing awaits it: the scheduler's first tick happens on
+ * its own interval, and a brief that takes a model call is not something the
+ * first request should queue behind.
+ *
+ * The missed-window catch-up is what makes starting here sufficient. Otto does
+ * not run while it is closed (`runtime.md` §1 supervises a process, not a
+ * daemon), so a weekend's briefs are produced by the first ticks after launch
+ * rather than at the hours they were due.
+ */
+function startScheduledWork(storage: Storage): void {
+  createScheduler({
+    worker: createProjectionWorker(storage),
+    production: createBriefProduction(storage),
+  })?.start();
 }
 
 /**
