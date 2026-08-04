@@ -10,9 +10,11 @@ import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
 import { ProposalAdjudication } from "./application/pipeline/adjudicate-proposal.js";
 import { DuplicateDetection } from "./application/pipeline/detect-duplicates.js";
 import { CaptureTriage, type CorrectionCounts } from "./application/pipeline/triage-capture.js";
-import { BriefProduction } from "./application/pipeline/produce-brief.js";
-import { Scheduler } from "./application/schedule/scheduler.js";
-import { scheduledTasks, type ScheduledWork } from "./application/schedule/scheduled-tasks.js";
+import type { Scheduler } from "./application/schedule/scheduler.js";
+import type { ScheduledWork } from "./application/schedule/scheduled-tasks.js";
+import { createScheduler as buildScheduler } from "./composition/schedule-wiring.js";
+
+export { createBriefProduction } from "./composition/schedule-wiring.js";
 import { ReviewQueue } from "./application/surface/read-review-queue.js";
 import { BootstrapStatus } from "./application/surface/read-bootstrap-status.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";
@@ -29,11 +31,9 @@ import { SqliteCorrectionStore } from "./infrastructure/persistence/sqlite-corre
 import { SqliteBriefStore } from "./infrastructure/persistence/sqlite-brief-store.js";
 import { LocalEmbedder } from "./infrastructure/embedding/local-embedder.js";
 import { LocalAdjudicator } from "./infrastructure/llm/local-adjudicator.js";
-import { InMemoryBriefGenerator } from "./infrastructure/llm/in-memory-brief-generator.js";
 import { WhisperCliTranscriber } from "./infrastructure/transcription/whisper-cli-transcriber.js";
 import type { CandidateReads } from "./inference/resolution/candidate-generation.js";
 import type { Adjudicator } from "./ports/adjudicator.js";
-import type { BriefGenerator } from "./ports/brief-generator.js";
 import type { CaptureStore } from "./ports/capture-store.js";
 import type { DispositionStore } from "./ports/disposition-store.js";
 import type { Embedder } from "./ports/embedder.js";
@@ -432,37 +432,12 @@ export function createTriage(storage: Storage, now: () => string = defaultClock)
   });
 }
 
-/**
- * Brief production, wired to the log, the brief table, and a generator.
- *
- * The generator defaults to the in-memory one, which writes the selection down
- * rather than writing prose. That is the honest wiring today: Slice 10 built
- * the port and this adapter and left the model-backed adapter unbuilt, so a
- * default naming a provider would be a default that throws. A brief still gets
- * written, still records what mattered, and still reads plainly — which is the
- * degradation `compose-brief.ts` already designs for.
- */
-export function createBriefProduction(
-  storage: Storage,
-  generator: BriefGenerator = new InMemoryBriefGenerator(),
-): BriefProduction {
-  return new BriefProduction({ events: storage.events, briefs: storage.briefs, generator });
-}
-
-/**
- * The scheduler, or `undefined` when nothing is wired for it to drive.
- *
- * Returning `undefined` rather than an idle scheduler is Slice 12's "omitted
- * when no tasks are wired": a loop that wakes every minute to iterate an empty
- * list is a timer with no purpose, and the caller that would have to check for
- * one anyway is the caller that starts it.
- */
+/** The scheduler, or `undefined` when nothing is wired for it to drive. */
 export function createScheduler(
   work: ScheduledWork,
   now: () => string = defaultClock,
 ): Scheduler | undefined {
-  const tasks = scheduledTasks(work);
-  return tasks.length === 0 ? undefined : new Scheduler({ tasks, now });
+  return buildScheduler(work, now);
 }
 
 /**
