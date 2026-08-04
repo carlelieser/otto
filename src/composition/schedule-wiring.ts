@@ -52,7 +52,21 @@ export function createBriefProduction(
  * list is a timer with no purpose, and the caller that would have to check for
  * one anyway is the caller that starts it.
  */
-export function createScheduler(work: ScheduledWork, now: () => string): Scheduler | undefined {
+export function createScheduler(
+  work: ScheduledWork,
+  now: () => string = defaultClock,
+): Scheduler | undefined {
   const tasks = scheduledTasks(work);
   return tasks.length === 0 ? undefined : new Scheduler({ tasks, now });
+}
+
+/**
+ * The wall clock, duplicated from `composition-root.ts` rather than imported.
+ *
+ * Four lines against a dependency pointing from `composition/` back into the
+ * root it was split out of, which would make the split a rename rather than a
+ * separation.
+ */
+function defaultClock(): string {
+  return new Date().toISOString();
 }

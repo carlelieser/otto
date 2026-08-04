@@ -10,11 +10,7 @@ import { CaptureRecovery } from "./application/pipeline/recover-captures.js";
 import { ProposalAdjudication } from "./application/pipeline/adjudicate-proposal.js";
 import { DuplicateDetection } from "./application/pipeline/detect-duplicates.js";
 import { CaptureTriage, type CorrectionCounts } from "./application/pipeline/triage-capture.js";
-import type { Scheduler } from "./application/schedule/scheduler.js";
-import type { ScheduledWork } from "./application/schedule/scheduled-tasks.js";
-import { createScheduler as buildScheduler } from "./composition/schedule-wiring.js";
-
-export { createBriefProduction } from "./composition/schedule-wiring.js";
+export { createBriefProduction, createScheduler } from "./composition/schedule-wiring.js";
 import { ReviewQueue } from "./application/surface/read-review-queue.js";
 import { BootstrapStatus } from "./application/surface/read-bootstrap-status.js";
 import { openDatabase } from "./infrastructure/persistence/database.js";
@@ -430,14 +426,6 @@ export function createTriage(storage: Storage, now: () => string = defaultClock)
     corrections: createCorrectionCounts(storage),
     now,
   });
-}
-
-/** The scheduler, or `undefined` when nothing is wired for it to drive. */
-export function createScheduler(
-  work: ScheduledWork,
-  now: () => string = defaultClock,
-): Scheduler | undefined {
-  return buildScheduler(work, now);
 }
 
 /**
