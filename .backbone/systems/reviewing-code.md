@@ -1,6 +1,6 @@
 ---
 system: Reviewing code
-status: unvalidated
+status: validated
 created: 2026-08-04
 invoked-by:
   - opening-a-pull-request.md
@@ -190,9 +190,15 @@ the fact. The two are different acts.
 
 A finding fitting none of these four is fixed.
 
-Declinations are recorded in the pull request body, not only in a reply. A
-finding raised and left unaddressed reads to a later reader as an oversight
-unless the body says otherwise.
+A declined finding reaches the pull request body only where it leaves something
+still true at merge: a standing weakness is a known gap, a defect belonging to
+different work is a pre-existing issue, and a rejected alternative that explains
+the design is a judgment call. The body describes the final state, so a finding
+that was fixed leaves nothing to record there, and no section names the review
+itself (`opening-a-pull-request.md`).
+
+The review file in `.backbone/scratch/` is where every finding and its
+disposition is recorded, including the ones that never reach the body.
 
 ### Fixes
 
@@ -219,8 +225,29 @@ code that runs?
 
 ## Validation
 
-**This system is unvalidated.** It was reasoned out in full but has never been
-executed. Its first run is its first test, and any step that proves unworkable in
-practice is a defect in this document rather than a step to be skipped.
+**First executed on Slice 12** (pull request #23, merged), over a 1,303-line
+diff, followed by a re-review after the fixes landed.
 
-Record the outcome of the first execution here.
+The four axes found a defect that 1,170 passing tests did not: a weekly brief
+window unreachable for 312 hours a year. The coverage requirement did its work —
+a test existed asserting the correct bound, and its reasoning held only for the
+hours after the trigger, which a review reporting findings alone would not have
+surfaced.
+
+Isolation earned its cost. The rules axis reported two pre-existing threshold
+breaches that the design axis, holding the rationale for the module, did not
+raise. Four agents produced two overlapping findings out of thirteen, which is a
+lower duplication rate than the four-way split predicted.
+
+One correction to this document followed from the run: the instruction to record
+declinations in the pull request body was wrong, and is replaced above.
+
+Two limits observed and not yet resolved:
+
+- **A re-review pinned to a commit goes stale if work continues.** The
+  correctness re-review ran while a later commit landed and reported the working
+  tree changing beneath it. Its findings had to be re-checked by hand against the
+  final state.
+- **An axis cannot see what another axis fixed.** The design axis re-reviewed a
+  change the correctness axis had made, and reported it as new work rather than
+  as a fix, which is correct but reads as duplication.

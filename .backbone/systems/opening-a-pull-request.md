@@ -1,6 +1,6 @@
 ---
 system: Opening a pull request
-status: unvalidated
+status: validated
 created: 2026-08-02
 depends-on:
   - reviewing-code.md
@@ -47,10 +47,28 @@ trigger fires and omitted when it does not. This is not a matter of preference.
 | Section             | Trigger                                                                                   |
 | ------------------- | ----------------------------------------------------------------------------------------- |
 | Scope boundaries    | The work deliberately left something unbuilt that a reader could mistake for an oversight |
-| Review findings     | The review pass found a defect, and it was fixed or explicitly declined                   |
 | Known gaps          | Something is knowingly incomplete or wrong and is being merged regardless                 |
 | Pre-existing issues | The work surfaced a defect it did not cause and did not fix                               |
 | Descoped            | Something the specification asked for was deliberately not delivered                      |
+
+### The body describes the final state, never the route to it
+
+There is no section for review findings, and adding one is a defect. A defect
+that was found and fixed is not part of the work; the fixed code is. A reader
+arriving later needs to know how the system behaves now, and is misled by a
+narrative of what it did before the last commit.
+
+A finding reaches the body only where it describes something still true at
+merge — which the triggers above already cover. A declined finding that leaves a
+standing gap is a known gap. One that belongs to different work is a
+pre-existing issue. One that is fixed leaves nothing to say.
+
+The same rule governs everything else the body might narrate: an approach
+abandoned partway, a fix that took three attempts, a test that passed against a
+bug. Where such a thing changed what the code now is — a rejected alternative
+that explains the design — it belongs under the judgment calls, stated as a
+property rather than as a history. Where it did not, it belongs in the commit
+log and nowhere else.
 
 ### Escape hatch
 
@@ -70,11 +88,16 @@ complexity, clear. No meta commentary. No casual text.
 unverified, say so plainly. A value chosen without derivation is named as
 invented. A behaviour believed correct but untested is named as untested.
 
-**Failures are recorded.** A test that passed against a bug, an approach
-abandoned partway, a fix that took three attempts — these belong in the body.
-This is the material with the highest value to a later reader and the lowest rate
-of survival. Omitting it produces a record that reads as uniformly competent and
-is therefore untrustworthy.
+**Weaknesses that survive to the merge are stated.** A behaviour known to be
+wrong, a test that cannot catch what it appears to cover, a bound that is a guess
+— these belong in the body, because they are true of the code being merged. This
+is the material with the highest value to a later reader and the lowest rate of
+survival. Omitting it produces a record that reads as uniformly competent and is
+therefore untrustworthy.
+
+This is not licence to narrate. A weakness is stated as a present property of the
+work, not as an account of the trouble it caused on the way. Failures that were
+resolved leave no trace in the body; the commit log holds them.
 
 **No unexplained shorthand, and no references to conversations.** The reader has
 neither. Terms specific to this work are defined or linked on first use.
@@ -122,8 +145,11 @@ To the standard above, with the review's findings in hand.
 Every claim must be true at this point. Each number was measured after the last
 fix landed — verification counts in particular, which change whenever tests are
 added. No claim is carried over from a previous pull request or written from
-memory. The review output in `.backbone/scratch/` is the source for the findings
-section; it is not written from recollection.
+memory. Where a declined finding leaves a standing weakness, the review output in
+`.backbone/scratch/` is the source for it; it is not written from recollection.
+
+Then read the body back against the style section before publishing it. Writing
+to those rules does not reliably produce a body that obeys them.
 
 ### 5. Open the pull request
 
@@ -140,16 +166,36 @@ not decide.
 
 - A pull request that only makes sense to someone who was present for the work.
 - A review pass spent reporting mechanical breakage.
-- A body written before its own review findings are known, and amended afterwards
-  until the two disagree.
-- A record that reads as uniformly successful because the failures were removed.
+- A body written before the review's findings are known, and amended afterwards
+  until the code and the record disagree.
+- A record that hides a weakness the merged code still carries.
+- A record that recounts the work's history instead of describing its result.
 - Changes reaching the default branch without passing through a gate, because the
   gate is self-imposed and nobody outside enforces it.
 
 ## Validation
 
-**This system is unvalidated.** It was reasoned out in full but has never been
-executed. Its first run is its first test, and any step that proves unworkable in
-practice is a defect in this document rather than a step to be skipped.
+**First executed on Slice 12** (pull request #23, merged). The procedure held.
+Four defects in this document surfaced and are corrected above.
 
-Record the outcome of the first execution here.
+**The body must describe the final state, not the route to it.** The optional
+sections included a trigger for review findings, which produced a body narrating
+defects that no longer existed. The trigger is removed and the rule is stated
+explicitly, because a section heading is an invitation.
+
+**"Failures are recorded" was too broad.** It read as licence to narrate the
+work's history and is now limited to weaknesses that survive to the merge.
+
+**Both required a second pass to enforce.** The first body was written to this
+document and still contained meta commentary, process narration, and a casual
+register. The style section names those faults; naming them was not enough to
+prevent them. A body is now read back against this section before it is
+published, not only written from it.
+
+**The pull request state is re-read before any commit is added to its branch.**
+A commit was pushed to a branch whose pull request had already merged, stranding
+it. Step 7 ends the procedure; work after it starts a new one.
+
+Nothing in the procedure proved unworkable. The pre-flight gate caught a
+non-working commit before review, and the review caught a defect that the test
+suite did not.
